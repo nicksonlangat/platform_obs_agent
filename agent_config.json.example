@@ -9,5 +9,6 @@
   "heartbeat_interval": 60,
   "batch_size": 100,
   "flush_interval": 10,
+  "poll_interval": 2,
   "log_level": "INFO"
 }

@@ -10,18 +10,8 @@ import sys
 import argparse
 from datetime import datetime
 from typing import List, Dict
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from config import Config
 from log_parser import LogParser
-
-class LogFileHandler(FileSystemEventHandler):
-    def __init__(self, agent):
-        self.agent = agent
-    
-    def on_modified(self, event):
-        if not event.is_directory and event.src_path in self.agent.config.get('log_files', []):
-            self.agent.process_log_file(event.src_path)
 
 class ObservabilityAgent:
     def __init__(self):
@@ -29,7 +19,7 @@ class ObservabilityAgent:
         self.parser = LogParser()
         self.running = False
         self.log_buffer = []
-        self.observer = None
+        self.file_positions = {}  # Track file positions for reliable reading
         
         logging.basicConfig(
             level=getattr(logging, self.config.get('log_level', 'INFO')),
@@ -48,14 +38,19 @@ class ObservabilityAgent:
         self.running = True
         self.logger.info("Starting Observability Agent...")
         
-        # Start file monitoring
-        self._start_file_monitoring()
-        
+        # Initialize file positions
+        self._initialize_file_positions()
+
+        # Start file monitoring thread
+        monitor_thread = threading.Thread(target=self._monitor_files)
+        monitor_thread.daemon = True
+        monitor_thread.start()
+
         # Start heartbeat thread
         heartbeat_thread = threading.Thread(target=self._heartbeat_loop)
         heartbeat_thread.daemon = True
         heartbeat_thread.start()
-        
+
         # Start flush thread
         flush_thread = threading.Thread(target=self._flush_loop)
         flush_thread.daemon = True
@@ -71,51 +66,92 @@ class ObservabilityAgent:
     def stop(self):
         self.logger.info("Stopping Observability Agent...")
         self.running = False
-        
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-        
+
         # Final flush
         self._flush_logs()
-        
+
         self.logger.info("Agent stopped")
     
-    def _start_file_monitoring(self):
+    def _initialize_file_positions(self):
+        """Initialize file positions - start from end for existing files"""
         log_files = self.config.get('log_files', [])
-        if not log_files:
-            self.logger.warning("No log files configured")
-            return
-        
-        self.observer = Observer()
-        handler = LogFileHandler(self)
-        
         for log_file in log_files:
-            directory = os.path.dirname(log_file)
-            self.observer.schedule(handler, directory, recursive=False)
-            self.logger.info(f"Monitoring log file: {log_file}")
-        
-        self.observer.start()
-    
-    def process_log_file(self, file_path: str):
+            try:
+                if os.path.exists(log_file) and os.access(log_file, os.R_OK):
+                    with open(log_file, 'r') as f:
+                        f.seek(0, 2)  # Go to end of file
+                        self.file_positions[log_file] = f.tell()
+                    self.logger.info(f"Monitoring log file: {log_file}")
+                else:
+                    self.logger.warning(f"Log file not accessible: {log_file}")
+                    self.file_positions[log_file] = 0
+            except Exception as e:
+                self.logger.error(f"Error initializing file position for {log_file}: {e}")
+                self.file_positions[log_file] = 0
+
+    def _monitor_files(self):
+        """Continuously monitor log files for new content"""
+        poll_interval = self.config.get('poll_interval', 2)  # Poll every 2 seconds
+
+        while self.running:
+            try:
+                for log_file in self.config.get('log_files', []):
+                    self._check_file_for_new_content(log_file)
+
+                time.sleep(poll_interval)
+            except Exception as e:
+                self.logger.error(f"Error in file monitoring loop: {e}")
+                time.sleep(5)  # Back off on error
+
+    def _check_file_for_new_content(self, file_path: str):
+        """Check a single file for new content and process new lines"""
         try:
+            if not os.path.exists(file_path):
+                return
+
+            current_size = os.path.getsize(file_path)
+            last_position = self.file_positions.get(file_path, 0)
+
+            # Check if file was truncated (log rotation)
+            if current_size < last_position:
+                self.logger.info(f"Log rotation detected for {file_path}")
+                last_position = 0
+
+            # No new content
+            if current_size <= last_position:
+                return
+
+            # Read new content
             with open(file_path, 'r') as f:
-                f.seek(0, 2)  # Go to end of file
-                while self.running:
-                    line = f.readline()
+                f.seek(last_position)
+
+                lines_processed = 0
+                for line in f:
+                    line = line.strip()
                     if not line:
-                        break
-                    
-                    parsed_log = self.parser.parse_line(line)
-                    parsed_log['log_source_id'] = self.config.get('log_source_id')
-                    
-                    self.log_buffer.append(parsed_log)
-                    
-                    if len(self.log_buffer) >= self.config.get('batch_size', 100):
-                        self._flush_logs()
-        
+                        continue
+
+                    try:
+                        parsed_log = self.parser.parse_line(line)
+                        parsed_log['log_source_id'] = self.config.get('log_source_id')
+                        self.log_buffer.append(parsed_log)
+                        lines_processed += 1
+
+                        # Flush if buffer is full
+                        if len(self.log_buffer) >= self.config.get('batch_size', 100):
+                            self._flush_logs()
+
+                    except Exception as e:
+                        self.logger.debug(f"Failed to parse log line: {e}")
+
+                # Update file position
+                self.file_positions[file_path] = f.tell()
+
+                if lines_processed > 0:
+                    self.logger.debug(f"Processed {lines_processed} new log lines from {file_path}")
+
         except Exception as e:
-            self.logger.error(f"Error processing log file {file_path}: {e}")
+            self.logger.error(f"Error checking file {file_path}: {e}")
     
     def _flush_logs(self):
         if not self.log_buffer:
