@@ -161,6 +161,9 @@ setup_log_directories() {
     # Common log directories
     mkdir -p /var/log/nginx /var/log/gunicorn /var/log/platform-obs-agent
 
+    # Agent state directory
+    mkdir -p /var/lib/platform-obs-agent
+
     # Set permissions for common web server users
     if id "nginx" &>/dev/null; then
         chown nginx:nginx /var/log/nginx

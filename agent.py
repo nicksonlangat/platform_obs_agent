@@ -8,8 +8,10 @@ import logging
 import signal
 import sys
 import argparse
+import json
+import hashlib
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Set
 from config import Config
 from log_parser import LogParser
 
@@ -20,6 +22,9 @@ class ObservabilityAgent:
         self.running = False
         self.log_buffer = []
         self.file_positions = {}  # Track file positions for reliable reading
+        self.positions_file = '/var/lib/platform-obs-agent/positions.json'
+        self.recent_log_hashes: Set[str] = set()  # Track recent log hashes to prevent duplicates
+        self.buffer_lock = threading.Lock()  # Prevent concurrent buffer modifications
         
         logging.basicConfig(
             level=getattr(logging, self.config.get('log_level', 'INFO')),
@@ -38,7 +43,8 @@ class ObservabilityAgent:
         self.running = True
         self.logger.info("Starting Observability Agent...")
         
-        # Initialize file positions
+        # Initialize file positions and load from disk
+        self._load_file_positions()
         self._initialize_file_positions()
 
         # Start file monitoring thread
@@ -55,6 +61,11 @@ class ObservabilityAgent:
         flush_thread = threading.Thread(target=self._flush_loop)
         flush_thread.daemon = True
         flush_thread.start()
+
+        # Start position save thread
+        position_save_thread = threading.Thread(target=self._position_save_loop)
+        position_save_thread.daemon = True
+        position_save_thread.start()
         
         # Main loop
         try:
@@ -70,24 +81,55 @@ class ObservabilityAgent:
         # Final flush
         self._flush_logs()
 
+        # Save file positions
+        self._save_file_positions()
+
         self.logger.info("Agent stopped")
     
+    def _load_file_positions(self):
+        """Load file positions from disk"""
+        try:
+            os.makedirs(os.path.dirname(self.positions_file), exist_ok=True)
+            if os.path.exists(self.positions_file):
+                with open(self.positions_file, 'r') as f:
+                    self.file_positions = json.load(f)
+                self.logger.info(f"Loaded file positions from {self.positions_file}")
+        except Exception as e:
+            self.logger.warning(f"Could not load file positions: {e}")
+            self.file_positions = {}
+
+    def _save_file_positions(self):
+        """Save file positions to disk"""
+        try:
+            os.makedirs(os.path.dirname(self.positions_file), exist_ok=True)
+            with open(self.positions_file, 'w') as f:
+                json.dump(self.file_positions, f)
+            self.logger.debug(f"Saved file positions to {self.positions_file}")
+        except Exception as e:
+            self.logger.error(f"Could not save file positions: {e}")
+
     def _initialize_file_positions(self):
-        """Initialize file positions - start from end for existing files"""
+        """Initialize file positions - start from end for new files only"""
         log_files = self.config.get('log_files', [])
         for log_file in log_files:
             try:
                 if os.path.exists(log_file) and os.access(log_file, os.R_OK):
-                    with open(log_file, 'r') as f:
-                        f.seek(0, 2)  # Go to end of file
-                        self.file_positions[log_file] = f.tell()
-                    self.logger.info(f"Monitoring log file: {log_file}")
+                    # Only initialize if we don't have a saved position
+                    if log_file not in self.file_positions:
+                        with open(log_file, 'r') as f:
+                            f.seek(0, 2)  # Go to end of file for new files
+                            self.file_positions[log_file] = f.tell()
+                        self.logger.info(f"Monitoring new log file: {log_file} (starting from end)")
+                    else:
+                        self.logger.info(f"Resuming monitoring: {log_file} (from position {self.file_positions[log_file]})")
                 else:
                     self.logger.warning(f"Log file not accessible: {log_file}")
-                    self.file_positions[log_file] = 0
+                    if log_file not in self.file_positions:
+                        self.file_positions[log_file] = 0
             except Exception as e:
                 self.logger.error(f"Error initializing file position for {log_file}: {e}")
-                self.file_positions[log_file] = 0
+                if log_file not in self.file_positions:
+                    self.file_positions[log_file] = 0
 
     def _monitor_files(self):
         """Continuously monitor log files for new content"""
@@ -132,14 +174,35 @@ class ObservabilityAgent:
                         continue
 
                     try:
+                        # Create hash for deduplication
+                        log_hash = hashlib.md5(
+                            f"{file_path}:{last_position + f.tell() - len(line) - 1}:{line}".encode()
+                        ).hexdigest()
+
+                        # Skip if we've seen this log recently
+                        if log_hash in self.recent_log_hashes:
+                            self.logger.debug(f"Skipping duplicate log entry")
+                            continue
+
                         parsed_log = self.parser.parse_line(line)
                         parsed_log['log_source_id'] = self.config.get('log_source_id')
-                        self.log_buffer.append(parsed_log)
-                        lines_processed += 1
+                        parsed_log['_hash'] = log_hash  # Include hash for server-side dedup
 
-                        # Flush if buffer is full
-                        if len(self.log_buffer) >= self.config.get('batch_size', 100):
-                            self._flush_logs()
+                        # Thread-safe buffer operations
+                        with self.buffer_lock:
+                            self.log_buffer.append(parsed_log)
+                            self.recent_log_hashes.add(log_hash)
+
+                            # Limit hash cache size (keep last 10000 hashes)
+                            if len(self.recent_log_hashes) > 10000:
+                                # Remove oldest hashes (approximate)
+                                self.recent_log_hashes = set(list(self.recent_log_hashes)[-5000:])
+
+                            lines_processed += 1
+
+                            # Flush if buffer is full
+                            if len(self.log_buffer) >= self.config.get('batch_size', 100):
+                                self._flush_logs()
 
                     except Exception as e:
                         self.logger.debug(f"Failed to parse log line: {e}")
@@ -154,12 +217,15 @@ class ObservabilityAgent:
             self.logger.error(f"Error checking file {file_path}: {e}")
     
     def _flush_logs(self):
-        if not self.log_buffer:
-            return
-        
-        try:
+        # Thread-safe flush operation
+        with self.buffer_lock:
+            if not self.log_buffer:
+                return
+
             logs_to_send = self.log_buffer.copy()
             self.log_buffer.clear()
+
+        try:
             
             # Convert datetime objects to ISO format strings
             for log in logs_to_send:
@@ -176,28 +242,20 @@ class ObservabilityAgent:
                 },
                 timeout=30
             )
-
-            # If authentication fails, try query parameter approach
-            if response.status_code == 401:
-                response = requests.post(
-                    f"{self.config.get('api_endpoint')}/logs/ingest/",
-                    json=logs_to_send,
-                    params={'api_key': api_token},
-                    headers={'Content-Type': 'application/json'},
-                    timeout=30
-                )
             
             if response.status_code == 201:
                 self.logger.debug(f"Successfully sent {len(logs_to_send)} log entries")
             else:
                 self.logger.error(f"Failed to send logs: {response.status_code} - {response.text}")
-                # Re-add logs to buffer for retry
-                self.log_buffer.extend(logs_to_send)
-        
+                # Re-add logs to buffer for retry (thread-safe)
+                with self.buffer_lock:
+                    self.log_buffer.extend(logs_to_send)
+
         except Exception as e:
             self.logger.error(f"Error sending logs: {e}")
-            # Re-add logs to buffer for retry
-            self.log_buffer.extend(logs_to_send)
+            # Re-add logs to buffer for retry (thread-safe)
+            with self.buffer_lock:
+                self.log_buffer.extend(logs_to_send)
     
     def _flush_loop(self):
         while self.running:
@@ -213,14 +271,6 @@ class ObservabilityAgent:
                     headers={'Authorization': f'Bearer {api_token}'},
                     timeout=10
                 )
-
-                # If authentication fails, try query parameter approach
-                if response.status_code == 401:
-                    response = requests.post(
-                        f"{self.config.get('api_endpoint')}/agent/log-sources/{self.config.get('log_source_id')}/heartbeat/",
-                        params={'api_key': api_token},
-                        timeout=10
-                    )
                 
                 if response.status_code == 200:
                     self.logger.debug("Heartbeat sent successfully")
@@ -231,7 +281,13 @@ class ObservabilityAgent:
                 self.logger.error(f"Heartbeat error: {e}")
             
             time.sleep(self.config.get('heartbeat_interval', 60))
-    
+
+    def _position_save_loop(self):
+        """Periodically save file positions to prevent data loss"""
+        while self.running:
+            time.sleep(30)  # Save positions every 30 seconds
+            self._save_file_positions()
+
     def _signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}")
         self.stop()
