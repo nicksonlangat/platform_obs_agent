@@ -1,0 +1,13 @@
+{
+  "api_endpoint": "http://localhost:8002/api",
+  "api_token": "pos_your-organization-api-token-here",
+  "log_source_id": "your-log-source-uuid-here",
+  "log_files": [
+    "/var/log/application.log",
+    "/var/log/nginx/access.log"
+  ],
+  "heartbeat_interval": 60,
+  "batch_size": 100,
+  "flush_interval": 10,
+  "log_level": "INFO"
+}
