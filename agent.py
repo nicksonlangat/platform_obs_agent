@@ -130,15 +130,26 @@ class ObservabilityAgent:
                 if isinstance(log['timestamp'], datetime):
                     log['timestamp'] = log['timestamp'].isoformat()
             
+            api_token = self.config.get("api_token")
             response = requests.post(
                 f"{self.config.get('api_endpoint')}/logs/ingest/",
                 json=logs_to_send,
                 headers={
-                    'Authorization': f'Bearer {self.config.get("api_token")}',
+                    'Authorization': f'Bearer {api_token}',
                     'Content-Type': 'application/json'
                 },
                 timeout=30
             )
+
+            # If authentication fails, try query parameter approach
+            if response.status_code == 401:
+                response = requests.post(
+                    f"{self.config.get('api_endpoint')}/logs/ingest/",
+                    json=logs_to_send,
+                    params={'api_key': api_token},
+                    headers={'Content-Type': 'application/json'},
+                    timeout=30
+                )
             
             if response.status_code == 201:
                 self.logger.debug(f"Successfully sent {len(logs_to_send)} log entries")
@@ -160,11 +171,20 @@ class ObservabilityAgent:
     def _heartbeat_loop(self):
         while self.running:
             try:
+                api_token = self.config.get("api_token")
                 response = requests.post(
-                    f"{self.config.get('api_endpoint')}/log-sources/{self.config.get('log_source_id')}/heartbeat/",
-                    headers={'Authorization': f'Bearer {self.config.get("api_token")}'},
+                    f"{self.config.get('api_endpoint')}/agent/log-sources/{self.config.get('log_source_id')}/heartbeat/",
+                    headers={'Authorization': f'Bearer {api_token}'},
                     timeout=10
                 )
+
+                # If authentication fails, try query parameter approach
+                if response.status_code == 401:
+                    response = requests.post(
+                        f"{self.config.get('api_endpoint')}/agent/log-sources/{self.config.get('log_source_id')}/heartbeat/",
+                        params={'api_key': api_token},
+                        timeout=10
+                    )
                 
                 if response.status_code == 200:
                     self.logger.debug("Heartbeat sent successfully")
@@ -197,11 +217,23 @@ def test_configuration():
 
         # Test API connectivity
         print("Testing API connectivity...")
+        api_token = config.get("api_token")
+
+        # Try the new agent-specific endpoint first
         response = requests.get(
-            f"{config.get('api_endpoint')}/log-sources/{config.get('log_source_id')}/",
-            headers={'Authorization': f'Bearer {config.get("api_token")}'},
+            f"{config.get('api_endpoint')}/agent/log-sources/{config.get('log_source_id')}/",
+            headers={'Authorization': f'Bearer {api_token}'},
             timeout=10
         )
+
+        # If that fails with 401/404, try query parameter approach
+        if response.status_code in [401, 404]:
+            print("Trying query parameter authentication...")
+            response = requests.get(
+                f"{config.get('api_endpoint')}/agent/log-sources/{config.get('log_source_id')}/",
+                params={'api_key': api_token},
+                timeout=10
+            )
 
         if response.status_code == 200:
             print("✓ API connection successful")
