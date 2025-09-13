@@ -114,7 +114,26 @@ install_python_deps() {
     log "Installing Python dependencies..."
 
     cd "$AGENT_DIR"
-    python3 -m pip install -r requirements.txt
+
+    # Create virtual environment for externally managed Python environments (Ubuntu 24.04+)
+    if python3 -m pip install --help 2>/dev/null | grep -q "externally-managed-environment"; then
+        log "Creating virtual environment for externally managed Python..."
+        python3 -m venv venv
+        source venv/bin/activate
+        python3 -m pip install -r requirements.txt
+
+        # Update service to use virtual environment
+        PYTHON_EXEC="$AGENT_DIR/venv/bin/python3"
+    else
+        # Try system-wide installation with fallback
+        python3 -m pip install -r requirements.txt --break-system-packages 2>/dev/null || {
+            log "System-wide installation failed, creating virtual environment..."
+            python3 -m venv venv
+            source venv/bin/activate
+            python3 -m pip install -r requirements.txt
+            PYTHON_EXEC="$AGENT_DIR/venv/bin/python3"
+        }
+    fi
 
     log "Python dependencies installed"
 }
@@ -160,6 +179,9 @@ setup_log_directories() {
 create_service() {
     log "Creating systemd service..."
 
+    # Use virtual environment Python if it exists
+    PYTHON_PATH="${PYTHON_EXEC:-/usr/bin/python3}"
+
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
 Description=Platform Observability Log Agent
@@ -172,7 +194,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=$AGENT_DIR
-ExecStart=/usr/bin/python3 $AGENT_DIR/agent.py
+ExecStart=$PYTHON_PATH $AGENT_DIR/agent.py
 ExecReload=/bin/kill -HUP \$MAINPID
 KillMode=process
 Restart=always
@@ -224,7 +246,8 @@ test_agent() {
     log "Testing agent configuration..."
 
     cd "$AGENT_DIR"
-    timeout 10s python3 agent.py --test-config 2>/dev/null || {
+    PYTHON_PATH="${PYTHON_EXEC:-python3}"
+    timeout 10s "$PYTHON_PATH" agent.py --test-config 2>/dev/null || {
         warning "Agent test failed or timed out. Check your configuration."
         return 1
     }
