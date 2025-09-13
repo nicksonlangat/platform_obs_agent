@@ -134,6 +134,12 @@ class ObservabilityAgent:
                     try:
                         parsed_log = self.parser.parse_line(line)
                         parsed_log['log_source_id'] = self.config.get('log_source_id')
+
+                        # Add source file to metadata
+                        if 'metadata' not in parsed_log:
+                            parsed_log['metadata'] = {}
+                        parsed_log['metadata']['source_file'] = file_path
+
                         self.log_buffer.append(parsed_log)
                         lines_processed += 1
 
