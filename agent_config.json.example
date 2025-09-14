@@ -10,5 +10,7 @@
   "batch_size": 100,
   "flush_interval": 10,
   "poll_interval": 2,
-  "log_level": "INFO"
+  "log_level": "INFO",
+  "collect_metrics": true,
+  "metrics_interval": 300
 }

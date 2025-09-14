@@ -8,10 +8,20 @@ import logging
 import signal
 import sys
 import argparse
-from datetime import datetime
+import platform
+import socket
+from datetime import datetime, timezone
 from typing import List, Dict
 from config import Config
 from log_parser import LogParser
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("Warning: psutil not available. Server metrics collection will be disabled.")
+    print("Install psutil with: pip install psutil")
 
 class ObservabilityAgent:
     def __init__(self):
@@ -55,7 +65,16 @@ class ObservabilityAgent:
         flush_thread = threading.Thread(target=self._flush_loop)
         flush_thread.daemon = True
         flush_thread.start()
-        
+
+        # Start metrics collection thread (if enabled and psutil available)
+        if self.config.get('collect_metrics', True) and PSUTIL_AVAILABLE:
+            metrics_thread = threading.Thread(target=self._metrics_loop)
+            metrics_thread.daemon = True
+            metrics_thread.start()
+            self.logger.info("Server metrics collection enabled")
+        else:
+            self.logger.info("Server metrics collection disabled")
+
         # Main loop
         try:
             while self.running:
@@ -237,7 +256,156 @@ class ObservabilityAgent:
                 self.logger.error(f"Heartbeat error: {e}")
             
             time.sleep(self.config.get('heartbeat_interval', 60))
-    
+
+    def _collect_server_metrics(self) -> Dict:
+        """Collect server metrics using psutil"""
+        if not PSUTIL_AVAILABLE:
+            return {}
+
+        metrics = {
+            'log_source_id': self.config.get('log_source_id'),
+            'collected_at': datetime.now(timezone.utc).isoformat(),
+            'agent_version': '1.0.0'
+        }
+
+        try:
+            # Network information
+            try:
+                hostname = socket.gethostname()
+                local_ip = socket.gethostbyname(hostname)
+                metrics['ip_address'] = local_ip
+            except:
+                pass
+
+            # System information
+            try:
+                uname = platform.uname()
+                boot_time = psutil.boot_time()
+                uptime_seconds = int(time.time() - boot_time)
+
+                metrics.update({
+                    'os_name': uname.system,
+                    'os_version': uname.release,
+                    'kernel_version': uname.version,
+                    'architecture': uname.machine,
+                    'uptime_seconds': uptime_seconds
+                })
+            except Exception as e:
+                self.logger.debug(f"Error collecting system info: {e}")
+
+            # CPU metrics
+            try:
+                metrics.update({
+                    'cpu_count': psutil.cpu_count(),
+                    'cpu_usage_percent': psutil.cpu_percent(interval=1)
+                })
+
+                # Load averages (Unix-like systems only)
+                try:
+                    load_avg = psutil.getloadavg()
+                    metrics.update({
+                        'load_average_1m': load_avg[0],
+                        'load_average_5m': load_avg[1],
+                        'load_average_15m': load_avg[2]
+                    })
+                except (AttributeError, OSError):
+                    pass
+            except Exception as e:
+                self.logger.debug(f"Error collecting CPU metrics: {e}")
+
+            # Memory metrics
+            try:
+                memory = psutil.virtual_memory()
+                metrics.update({
+                    'memory_total': memory.total,
+                    'memory_available': memory.available,
+                    'memory_used': memory.used,
+                    'memory_usage_percent': memory.percent
+                })
+            except Exception as e:
+                self.logger.debug(f"Error collecting memory metrics: {e}")
+
+            # Swap metrics
+            try:
+                swap = psutil.swap_memory()
+                metrics.update({
+                    'swap_total': swap.total,
+                    'swap_used': swap.used,
+                    'swap_usage_percent': swap.percent
+                })
+            except Exception as e:
+                self.logger.debug(f"Error collecting swap metrics: {e}")
+
+            # Disk metrics
+            try:
+                # Use root directory, or C:\ on Windows
+                path = 'C:\\' if platform.system() == 'Windows' else '/'
+                disk = psutil.disk_usage(path)
+                metrics.update({
+                    'disk_total': disk.total,
+                    'disk_used': disk.used,
+                    'disk_available': disk.free,
+                    'disk_usage_percent': (disk.used / disk.total) * 100 if disk.total > 0 else 0
+                })
+            except Exception as e:
+                self.logger.debug(f"Error collecting disk metrics: {e}")
+
+            # Process and network metrics
+            try:
+                metrics['process_count'] = len(psutil.pids())
+
+                net_io = psutil.net_io_counters()
+                metrics.update({
+                    'network_bytes_sent': net_io.bytes_sent,
+                    'network_bytes_received': net_io.bytes_recv
+                })
+            except Exception as e:
+                self.logger.debug(f"Error collecting process/network metrics: {e}")
+
+        except Exception as e:
+            self.logger.error(f"Error collecting server metrics: {e}")
+
+        return metrics
+
+    def _send_server_metrics(self):
+        """Send server metrics to the API"""
+        try:
+            metrics = self._collect_server_metrics()
+            if not metrics:
+                return
+
+            api_token = self.config.get("api_token")
+            response = requests.post(
+                f"{self.config.get('api_endpoint')}/core/agent/metrics/",
+                json=metrics,
+                headers={
+                    'Authorization': f'Token {api_token}',
+                    'Content-Type': 'application/json'
+                },
+                timeout=30
+            )
+
+            if response.status_code == 201:
+                self.logger.debug("Server metrics sent successfully")
+            else:
+                self.logger.warning(f"Failed to send metrics: {response.status_code} - {response.text}")
+
+        except Exception as e:
+            self.logger.error(f"Error sending server metrics: {e}")
+
+    def _metrics_loop(self):
+        """Periodically send server metrics"""
+        metrics_interval = self.config.get('metrics_interval', 300)  # Default 5 minutes
+        self.logger.info(f"Starting metrics collection loop (interval: {metrics_interval}s)")
+
+        while self.running:
+            try:
+                self._send_server_metrics()
+                time.sleep(metrics_interval)
+            except Exception as e:
+                self.logger.error(f"Error in metrics loop: {e}")
+                time.sleep(60)  # Back off on error
+
     def _signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}")
         self.stop()
