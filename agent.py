@@ -271,11 +271,20 @@ class ObservabilityAgent:
         try:
             # Network information
             try:
-                hostname = socket.gethostname()
-                local_ip = socket.gethostbyname(hostname)
-                metrics['ip_address'] = local_ip
-            except:
-                pass
+                # Get the actual server IP (the one that would be used for SSH)
+                server_ip = self._get_server_ip()
+                if server_ip:
+                    metrics['ip_address'] = server_ip
+
+                # Get public IP
+                public_ip = self._get_public_ip()
+                if public_ip:
+                    metrics['public_ip'] = public_ip
+
+                # Get hostname
+                metrics['hostname'] = socket.gethostname()
+            except Exception as e:
+                self.logger.debug(f"Error collecting network info: {e}")
 
             # System information
             try:
@@ -405,6 +414,58 @@ class ObservabilityAgent:
             except Exception as e:
                 self.logger.error(f"Error in metrics loop: {e}")
                 time.sleep(60)  # Back off on error
+
+    def _get_server_ip(self) -> str:
+        """Get the actual server IP address that would be used for external connections"""
+        try:
+            # Method 1: Connect to a remote address to see which local IP is used
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                # Use Google's DNS server as target (doesn't actually send data)
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except:
+            pass
+
+        try:
+            # Method 2: Get all network interfaces and find the first non-loopback IP
+            if PSUTIL_AVAILABLE:
+                for interface, addrs in psutil.net_if_addrs().items():
+                    for addr in addrs:
+                        if (addr.family == socket.AF_INET and
+                            not addr.address.startswith('127.') and
+                            not addr.address.startswith('169.254.')):  # Skip loopback and link-local
+                            return addr.address
+        except:
+            pass
+
+        try:
+            # Method 3: Fallback to hostname resolution
+            hostname = socket.gethostname()
+            return socket.gethostbyname(hostname)
+        except:
+            return None
+
+    def _get_public_ip(self) -> str:
+        """Get the public IP address using external services"""
+        services = [
+            'https://api.ipify.org?format=text',
+            'https://checkip.amazonaws.com',
+            'https://ipecho.net/plain',
+            'https://icanhazip.com'
+        ]
+
+        for service in services:
+            try:
+                response = requests.get(service, timeout=5)
+                if response.status_code == 200:
+                    ip = response.text.strip()
+                    # Basic validation that it looks like an IP
+                    if len(ip.split('.')) == 4:
+                        return ip
+            except:
+                continue
+
+        return None
 
     def _signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}")
