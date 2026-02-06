@@ -2,6 +2,7 @@
   "api_endpoint": "http://localhost:8002/api",
   "api_token": "pos_your-organization-api-token-here",
   "log_source_id": "your-log-source-uuid-here",
+  "hostname": "server01.example.com",
   "log_files": [
     "/var/log/application.log",
     "/var/log/nginx/access.log"
@@ -12,5 +13,23 @@
   "poll_interval": 2,
   "log_level": "INFO",
   "collect_metrics": true,
-  "metrics_interval": 300
+  "metrics_interval": 300,
+  "collect_docker_metrics": true,
+  "docker_metrics_interval": 60,
+  "collect_http_checks": true,
+  "http_check_interval": 60,
+  "http_services": [
+    {
+      "name": "My Web App",
+      "url": "https://example.com",
+      "method": "GET",
+      "timeout": 10,
+      "expected_status": 200
+    },
+    {
+      "name": "API Health",
+      "url": "https://api.example.com/health",
+      "timeout": 5
+    }
+  ]
 }

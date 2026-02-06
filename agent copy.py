@@ -24,13 +24,11 @@ except ImportError:
     print("Install psutil with: pip install psutil")
 
 try:
-    from docker_monitor import DockerMonitor
-    DOCKER_MONITOR_AVAILABLE = True
+    from celery_monitor import CeleryMonitor
+    CELERY_MONITOR_AVAILABLE = True
 except ImportError:
-    DOCKER_MONITOR_AVAILABLE = False
-    print("Warning: Docker monitor not available.")
-
-from http_monitor import HttpMonitor
+    CELERY_MONITOR_AVAILABLE = False
+    print("Warning: Celery monitor not available.")
 
 class ObservabilityAgent:
     def __init__(self):
@@ -40,14 +38,11 @@ class ObservabilityAgent:
         self.log_buffer = []
         self.file_positions = {}  # Track file positions for reliable reading
 
-        # Initialize Docker monitor if available
-        if DOCKER_MONITOR_AVAILABLE:
-            self.docker_monitor = DockerMonitor(self.config)
+        # Initialize Celery monitor if available
+        if CELERY_MONITOR_AVAILABLE:
+            self.celery_monitor = CeleryMonitor(self.config)
         else:
-            self.docker_monitor = None
-
-        # Initialize HTTP monitor (always available - uses requests)
-        self.http_monitor = HttpMonitor(self.config)
+            self.celery_monitor = None
         
         logging.basicConfig(
             level=getattr(logging, self.config.get('log_level', 'INFO')),
@@ -93,26 +88,15 @@ class ObservabilityAgent:
         else:
             self.logger.info("Server metrics collection disabled")
 
-        # Start Docker monitoring thread (if enabled and available)
-        if (self.config.get('collect_docker_metrics', True) and
-            DOCKER_MONITOR_AVAILABLE and self.docker_monitor and
-            self.docker_monitor.docker_available):
-            docker_thread = threading.Thread(target=self._docker_monitoring_loop)
-            docker_thread.daemon = True
-            docker_thread.start()
-            self.logger.info("Docker container monitoring enabled")
+        # Start Celery monitoring thread (if enabled and available)
+        if (self.config.get('collect_celery_metrics', True) and
+            CELERY_MONITOR_AVAILABLE and self.celery_monitor):
+            celery_thread = threading.Thread(target=self._celery_monitoring_loop)
+            celery_thread.daemon = True
+            celery_thread.start()
+            self.logger.info("Celery monitoring enabled")
         else:
-            self.logger.info("Docker container monitoring disabled")
-
-        # Start HTTP monitoring thread (if enabled and services configured)
-        http_services = self.config.get('http_services', [])
-        if self.config.get('collect_http_checks', True) and http_services:
-            http_thread = threading.Thread(target=self._http_monitoring_loop)
-            http_thread.daemon = True
-            http_thread.start()
-            self.logger.info(f"HTTP service monitoring enabled ({len(http_services)} services)")
-        else:
-            self.logger.info("HTTP service monitoring disabled")
+            self.logger.info("Celery monitoring disabled")
 
         # Main loop
         try:
@@ -506,35 +490,26 @@ class ObservabilityAgent:
 
         return None
 
-    def _docker_monitoring_loop(self):
-        """Periodically collect and send Docker container metrics"""
-        interval = self.config.get('docker_metrics_interval', 60)
-        self.logger.info(f"Starting Docker monitoring loop (interval: {interval}s)")
+    def _celery_monitoring_loop(self):
+        """Periodically collect and send Celery metrics"""
+        celery_interval = self.config.get('celery_metrics_interval', 300)  # Default 5 minutes
+        self.logger.info(f"Starting Celery monitoring loop (interval: {celery_interval}s)")
 
         while self.running:
             try:
-                containers = self.docker_monitor.collect_all_containers()
-                if containers:
-                    self.docker_monitor.send_container_metrics(containers)
-                    self.logger.debug(f"Sent metrics for {len(containers)} containers")
-            except Exception as e:
-                self.logger.error(f"Error in Docker monitoring loop: {e}")
-            time.sleep(interval)
+                if self.celery_monitor:
+                    metrics = self.celery_monitor.collect_celery_metrics()
+                    success = self.celery_monitor.send_metrics_to_platform(metrics)
 
-    def _http_monitoring_loop(self):
-        """Periodically check HTTP services and send results"""
-        interval = self.config.get('http_check_interval', 60)
-        self.logger.info(f"Starting HTTP monitoring loop (interval: {interval}s)")
+                    if success:
+                        self.logger.debug("Celery metrics sent successfully")
+                    else:
+                        self.logger.warning("Failed to send Celery metrics")
 
-        while self.running:
-            try:
-                results = self.http_monitor.check_all_services()
-                if results:
-                    self.http_monitor.send_check_results(results)
-                    self.logger.debug(f"Sent {len(results)} HTTP check results")
+                time.sleep(celery_interval)
             except Exception as e:
-                self.logger.error(f"Error in HTTP monitoring loop: {e}")
-            time.sleep(interval)
+                self.logger.error(f"Error in Celery monitoring loop: {e}")
+                time.sleep(60)  # Back off on error
 
     def _signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}")

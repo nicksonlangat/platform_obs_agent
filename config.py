@@ -20,7 +20,12 @@ class Config:
             "heartbeat_interval": 60,
             "batch_size": 100,
             "flush_interval": 10,
-            "log_level": "INFO"
+            "log_level": "INFO",
+            "collect_docker_metrics": True,
+            "docker_metrics_interval": 60,
+            "collect_http_checks": True,
+            "http_check_interval": 60,
+            "http_services": []
         }
         
         self._save_config(default_config)
