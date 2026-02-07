@@ -434,7 +434,7 @@ class ObservabilityAgent:
                 f"{self.config.get('api_endpoint')}/core/agent/metrics/",
                 json=metrics,
                 headers={
-                    'Authorization': f'Token {api_token}',
+                    'Authorization': f'Bearer {api_token}',
                     'Content-Type': 'application/json'
                 },
                 timeout=30
@@ -581,7 +581,7 @@ def test_configuration():
         }
 
         response = requests.post(
-            f"{config.get('api_endpoint')}/server-metrics/",
+            f"{config.get('api_endpoint')}/core/agent/metrics/",
             headers={'Authorization': f'Bearer {api_token}'},
             json=test_payload,
             timeout=10
@@ -591,7 +591,7 @@ def test_configuration():
         if response.status_code == 401:
             print("Trying query parameter authentication...")
             response = requests.post(
-                f"{config.get('api_endpoint')}/server-metrics/",
+                f"{config.get('api_endpoint')}/core/agent/metrics/",
                 params={'api_key': api_token},
                 json=test_payload,
                 timeout=10
