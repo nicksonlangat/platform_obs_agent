@@ -82,12 +82,23 @@ install_dependencies() {
 
     # Install basic utilities if missing
     log "Checking for basic utilities..."
-    if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
-        apt-get update -qq > /dev/null 2>&1
-        apt-get install -y curl wget > /dev/null 2>&1 || warning "Could not install curl/wget"
-    elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]] || [[ "$OS" == *"Amazon Linux"* ]]; then
-        yum install -y curl wget > /dev/null 2>&1 || warning "Could not install curl/wget"
+
+    # Check if curl/wget already exist
+    if command -v curl &> /dev/null && command -v wget &> /dev/null; then
+        log "curl and wget already installed"
+        return 0
     fi
+
+    log "Installing curl and wget..."
+    if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
+        log "Updating package lists (this may take a moment)..."
+        apt-get update -qq || warning "Package update had issues, continuing anyway..."
+        apt-get install -y curl wget || warning "Could not install curl/wget"
+    elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]] || [[ "$OS" == *"Amazon Linux"* ]]; then
+        yum install -y curl wget || warning "Could not install curl/wget"
+    fi
+
+    log "Utilities check complete"
 }
 
 # Create agent directory and copy files
