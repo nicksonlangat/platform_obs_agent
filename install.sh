@@ -128,23 +128,38 @@ install_python_deps() {
 
     cd "$AGENT_DIR"
 
-    # Create virtual environment for externally managed Python environments (Ubuntu 24.04+)
-    if python3 -m pip install --help 2>/dev/null | grep -q "externally-managed-environment"; then
-        log "Creating virtual environment for externally managed Python..."
-        python3 -m venv venv
+    # Helper function to create venv
+    create_venv() {
+        log "Creating Python virtual environment..."
+
+        # Check if python3-venv is available, install if not
+        if ! python3 -m venv --help &> /dev/null; then
+            log "Installing python3-venv package..."
+            if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]]; then
+                apt-get install -y python3-venv || {
+                    error "Failed to install python3-venv. Please run: apt install python3-venv"
+                }
+            elif [[ "$OS" == *"CentOS"* ]] || [[ "$OS" == *"Red Hat"* ]] || [[ "$OS" == *"Rocky"* ]] || [[ "$OS" == *"Amazon Linux"* ]]; then
+                yum install -y python3-virtualenv || warning "Could not install python3-virtualenv"
+            fi
+        fi
+
+        # Create venv
+        python3 -m venv venv || error "Failed to create virtual environment"
         source venv/bin/activate
         python3 -m pip install -r requirements.txt
-
-        # Update service to use virtual environment
         PYTHON_EXEC="$AGENT_DIR/venv/bin/python3"
+    }
+
+    # Create virtual environment for externally managed Python environments (Ubuntu 24.04+)
+    if python3 -m pip install --help 2>/dev/null | grep -q "externally-managed-environment"; then
+        log "Detected externally managed Python environment"
+        create_venv
     else
         # Try system-wide installation with fallback
         python3 -m pip install -r requirements.txt --break-system-packages 2>/dev/null || {
-            log "System-wide installation failed, creating virtual environment..."
-            python3 -m venv venv
-            source venv/bin/activate
-            python3 -m pip install -r requirements.txt
-            PYTHON_EXEC="$AGENT_DIR/venv/bin/python3"
+            log "System-wide installation failed, using virtual environment..."
+            create_venv
         }
     fi
 
