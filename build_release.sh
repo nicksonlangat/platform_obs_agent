@@ -39,10 +39,12 @@ cp docker_monitor.py "$RELEASE_DIR/"
 cp http_monitor.py "$RELEASE_DIR/"
 cp requirements.txt "$RELEASE_DIR/"
 cp install.sh "$RELEASE_DIR/"
+cp upgrade.sh "$RELEASE_DIR/"
 cp quickstart.sh "$RELEASE_DIR/" 2>/dev/null || true
 
 # Make scripts executable
 chmod +x "$RELEASE_DIR/install.sh"
+chmod +x "$RELEASE_DIR/upgrade.sh"
 chmod +x "$RELEASE_DIR/quickstart.sh" 2>/dev/null || true
 chmod +x "$RELEASE_DIR/agent.py"
 
@@ -138,6 +140,23 @@ MANAGEMENT COMMANDS
     sudo ./install.sh --restart     # Restart agent
     sudo ./install.sh --logs        # View logs
     sudo ./install.sh --uninstall   # Remove agent
+
+UPGRADING TO NEW VERSION
+────────────────────────────────────────────────────────────────
+No need to reconfigure! Just run:
+
+    curl -sSL https://github.com/nicksonlangat/platform_obs_agent/releases/latest/download/upgrade.sh | sudo bash
+
+Or manual upgrade:
+
+    wget https://github.com/nicksonlangat/platform_obs_agent/releases/latest/download/upgrade.sh
+    sudo bash upgrade.sh
+
+This will:
+  ✓ Backup your current installation
+  ✓ Preserve your configuration
+  ✓ Update to latest version
+  ✓ Restart the service automatically
 
 TROUBLESHOOTING
 ────────────────────────────────────────────────────────────────
