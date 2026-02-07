@@ -1,0 +1,114 @@
+name: Release Agent
+
+on:
+  push:
+    tags:
+      - 'agent-v*'  # Triggers on tags like agent-v1.0.0
+  workflow_dispatch:  # Allows manual trigger
+    inputs:
+      version:
+        description: 'Agent version (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION=${GITHUB_REF#refs/tags/agent-v}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Build release package
+        working-directory: backend/agent
+        run: |
+          chmod +x build_release.sh
+          ./build_release.sh ${{ steps.version.outputs.version }}
+
+      - name: Verify package
+        working-directory: backend/agent
+        run: |
+          PACKAGE="platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz"
+          if [ ! -f "$PACKAGE" ]; then
+            echo "Error: Package not found: $PACKAGE"
+            exit 1
+          fi
+          echo "Package created: $PACKAGE"
+          echo "Package size: $(du -h $PACKAGE | awk '{print $1}')"
+          echo "SHA256: $(sha256sum $PACKAGE | awk '{print $1}')"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: agent-v${{ steps.version.outputs.version }}
+          name: Agent v${{ steps.version.outputs.version }}
+          body: |
+            ## Platform Observability Agent v${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            ```bash
+            # Download and extract
+            wget https://github.com/${{ github.repository }}/releases/download/agent-v${{ steps.version.outputs.version }}/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
+            tar -xzf platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
+            cd platform-obs-agent-${{ steps.version.outputs.version }}
+
+            # Configure (only API token needed - auto-discovery enabled!)
+            cp agent_config.json.example agent_config.json
+            nano agent_config.json  # Add your API token
+
+            # Install
+            sudo ./install.sh
+            ```
+
+            ### What's New
+            - ✅ **Auto-Discovery**: No more manual log source creation! Agent automatically registers itself
+            - ✅ **Simplified Config**: Only requires `api_token` - machine ID detected automatically
+            - ✅ **Improved Stability**: Better error handling and retry logic
+
+            ### Features
+            - 🚀 One-command installation
+            - 📊 Server metrics collection
+            - 🐳 Docker container monitoring
+            - 🌐 HTTP service health checks
+            - 📝 Log file ingestion
+            - 🔄 Auto-restart on crash
+            - 📦 Automatic log rotation
+
+            ### System Requirements
+            - Linux (Ubuntu, Debian, CentOS, RHEL, Amazon Linux)
+            - Python 3.7+
+            - systemd
+
+            ### Documentation
+            - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/backend/agent/INSTALL.md)
+            - [Configuration](https://github.com/${{ github.repository }}/blob/main/backend/agent/README.md)
+            - [Troubleshooting](https://github.com/${{ github.repository }}/blob/main/backend/agent/TROUBLESHOOTING.md)
+
+            ### Checksums
+            ```
+            SHA256: $(cat backend/agent/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz | sha256sum | awk '{print $1}')
+            ```
+          files: |
+            backend/agent/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
+            backend/agent/build/release-info.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify success
+        run: |
+          echo "✓ Release created successfully!"
+          echo "Download URL: https://github.com/${{ github.repository }}/releases/download/agent-v${{ steps.version.outputs.version }}/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz"
