@@ -148,6 +148,9 @@ setup_config() {
     log "Validating configuration file..."
     python3 -c "import json; json.load(open('$CONFIG_FILE'))" 2>/dev/null || error "Invalid JSON in $CONFIG_FILE"
 
+    # Create agent directory if it doesn't exist
+    mkdir -p "$AGENT_DIR"
+
     # Copy config to agent directory
     cp "$CONFIG_FILE" "$AGENT_DIR/"
 
