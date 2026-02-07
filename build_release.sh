@@ -177,7 +177,7 @@ SHA256: ${TARBALL_CHECKSUM}
 
 Installation Instructions:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-wget https://github.com/yourorg/platform-obs/releases/download/v${AGENT_VERSION}/${OUTPUT_FILE}
+wget https://github.com/nicksonlangat/platform_obs_agent/releases/download/agent-v${AGENT_VERSION}/${OUTPUT_FILE}
 tar -xzf ${OUTPUT_FILE}
 cd ${RELEASE_NAME}
 cp agent_config.json.example agent_config.json

@@ -31,13 +31,13 @@ jobs:
           echo "Release version: $VERSION"
 
       - name: Build release package
-        working-directory: backend/agent
+        working-directory: agent
         run: |
           chmod +x build_release.sh
           ./build_release.sh ${{ steps.version.outputs.version }}
 
       - name: Verify package
-        working-directory: backend/agent
+        working-directory: agent
         run: |
           PACKAGE="platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz"
           if [ ! -f "$PACKAGE" ]; then
@@ -92,17 +92,17 @@ jobs:
             - systemd
 
             ### Documentation
-            - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/backend/agent/INSTALL.md)
-            - [Configuration](https://github.com/${{ github.repository }}/blob/main/backend/agent/README.md)
-            - [Troubleshooting](https://github.com/${{ github.repository }}/blob/main/backend/agent/TROUBLESHOOTING.md)
+            - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/agent/INSTALL.md)
+            - [Configuration](https://github.com/${{ github.repository }}/blob/main/agent/README.md)
+            - [Troubleshooting](https://github.com/${{ github.repository }}/blob/main/agent/TROUBLESHOOTING.md)
 
             ### Checksums
             ```
-            SHA256: $(cat backend/agent/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz | sha256sum | awk '{print $1}')
+            SHA256: $(cat agent/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz | sha256sum | awk '{print $1}')
             ```
           files: |
-            backend/agent/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
-            backend/agent/build/release-info.txt
+            agent/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
+            agent/build/release-info.txt
           draft: false
           prerelease: false
         env:

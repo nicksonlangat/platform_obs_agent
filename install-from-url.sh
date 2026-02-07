@@ -6,7 +6,7 @@ set -e
 
 API_TOKEN="${1}"
 VERSION="${2:-latest}"
-REPO_URL="https://github.com/yourorg/platform-observability-platform"
+REPO_URL="https://github.com/nicksonlangat/platform_obs_agent"
 DOWNLOAD_URL="${REPO_URL}/releases/download/agent-v${VERSION}/platform-obs-agent-${VERSION}.tar.gz"
 
 # Colors
