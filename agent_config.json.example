@@ -1,7 +1,6 @@
 {
   "api_endpoint": "http://localhost:8002/api",
   "api_token": "pos_your-organization-api-token-here",
-  "log_source_id": "your-log-source-uuid-here",
   "hostname": "server01.example.com",
   "log_files": [
     "/var/log/application.log",

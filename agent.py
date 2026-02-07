@@ -191,7 +191,8 @@ class ObservabilityAgent:
 
                     try:
                         parsed_log = self.parser.parse_line(line)
-                        parsed_log['log_source_id'] = self.config.get('log_source_id')
+                        parsed_log['machine_id'] = self.config.get_machine_id()
+                        parsed_log['hostname'] = self.config.get_hostname()
 
                         # Add source file to metadata
                         if 'metadata' not in parsed_log:
@@ -269,11 +270,19 @@ class ObservabilityAgent:
             self._flush_logs()
     
     def _heartbeat_loop(self):
+        """Legacy heartbeat (only used if log_source_id is configured)"""
+        # Skip heartbeat if using auto-discovery (machine_id mode)
+        # Metrics endpoint already updates last_seen
+        log_source_id = self.config.get('log_source_id')
+        if not log_source_id:
+            self.logger.info("Heartbeat disabled (using auto-discovery mode)")
+            return
+
         while self.running:
             try:
                 api_token = self.config.get("api_token")
                 response = requests.post(
-                    f"{self.config.get('api_endpoint')}/agent/log-sources/{self.config.get('log_source_id')}/heartbeat/",
+                    f"{self.config.get('api_endpoint')}/agent/log-sources/{log_source_id}/heartbeat/",
                     headers={'Authorization': f'Bearer {api_token}'},
                     timeout=10
                 )
@@ -281,19 +290,19 @@ class ObservabilityAgent:
                 # If authentication fails, try query parameter approach
                 if response.status_code == 401:
                     response = requests.post(
-                        f"{self.config.get('api_endpoint')}/agent/log-sources/{self.config.get('log_source_id')}/heartbeat/",
+                        f"{self.config.get('api_endpoint')}/agent/log-sources/{log_source_id}/heartbeat/",
                         params={'api_key': api_token},
                         timeout=10
                     )
-                
+
                 if response.status_code == 200:
                     self.logger.debug("Heartbeat sent successfully")
                 else:
                     self.logger.warning(f"Heartbeat failed: {response.status_code}")
-            
+
             except Exception as e:
                 self.logger.error(f"Heartbeat error: {e}")
-            
+
             time.sleep(self.config.get('heartbeat_interval', 60))
 
     def _collect_server_metrics(self) -> Dict:
@@ -302,7 +311,8 @@ class ObservabilityAgent:
             return {}
 
         metrics = {
-            'log_source_id': self.config.get('log_source_id'),
+            'machine_id': self.config.get_machine_id(),
+            'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
             'agent_version': '1.0.0'
         }
@@ -319,9 +329,6 @@ class ObservabilityAgent:
                 public_ip = self._get_public_ip()
                 if public_ip:
                     metrics['public_ip'] = public_ip
-
-                # Get hostname
-                metrics['hostname'] = socket.gethostname()
             except Exception as e:
                 self.logger.debug(f"Error collecting network info: {e}")
 
@@ -547,31 +554,46 @@ def test_configuration():
         config = Config()
         print("✓ Configuration file loaded successfully")
 
-        # Test required fields
-        required_fields = ['api_endpoint', 'api_token', 'log_source_id', 'log_files']
+        # Test required fields (log_source_id no longer required - using auto-discovery)
+        required_fields = ['api_endpoint', 'api_token']
         for field in required_fields:
             if not config.get(field):
                 print(f"✗ Missing required field: {field}")
                 return False
         print("✓ All required fields present")
 
-        # Test API connectivity
+        # Show machine identification
+        print(f"  Machine ID: {config.get_machine_id()}")
+        print(f"  Hostname: {config.get_hostname()}")
+
+        # Test API connectivity by sending a test metric
         print("Testing API connectivity...")
         api_token = config.get("api_token")
 
-        # Try the new agent-specific endpoint first
-        response = requests.get(
-            f"{config.get('api_endpoint')}/agent/log-sources/{config.get('log_source_id')}/",
+        # Test with a simple metrics payload (auto-discovery will create log source)
+        test_payload = {
+            'machine_id': config.get_machine_id(),
+            'hostname': config.get_hostname(),
+            'collected_at': datetime.now(timezone.utc).isoformat(),
+            'cpu_usage_percent': 0,
+            'memory_usage_percent': 0,
+            'disk_usage_percent': 0
+        }
+
+        response = requests.post(
+            f"{config.get('api_endpoint')}/server-metrics/",
             headers={'Authorization': f'Bearer {api_token}'},
+            json=test_payload,
             timeout=10
         )
 
-        # If that fails with 401/404, try query parameter approach
-        if response.status_code in [401, 404]:
+        # If that fails with 401, try query parameter approach
+        if response.status_code == 401:
             print("Trying query parameter authentication...")
-            response = requests.get(
-                f"{config.get('api_endpoint')}/agent/log-sources/{config.get('log_source_id')}/",
+            response = requests.post(
+                f"{config.get('api_endpoint')}/server-metrics/",
                 params={'api_key': api_token},
+                json=test_payload,
                 timeout=10
             )
 

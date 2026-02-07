@@ -312,10 +312,10 @@ class DockerMonitor:
         try:
             api_token = self.config.get('api_token')
             api_endpoint = self.config.get('api_endpoint')
-            log_source_id = self.config.get('log_source_id')
 
             payload = {
-                'log_source_id': log_source_id,
+                'machine_id': self.config.get_machine_id(),
+                'hostname': self.config.get_hostname(),
                 'collected_at': datetime.now(timezone.utc).isoformat(),
                 'containers': containers,
             }
