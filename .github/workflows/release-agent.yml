@@ -81,7 +81,6 @@ jobs:
             - 🚀 One-command installation
             - 📊 Server metrics collection
             - 🐳 Docker container monitoring
-            - 🌐 HTTP service health checks
             - 📝 Log file ingestion
             - 🔄 Auto-restart on crash
             - 📦 Automatic log rotation

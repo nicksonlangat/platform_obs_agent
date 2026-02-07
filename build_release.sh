@@ -36,7 +36,6 @@ cp agent.py "$RELEASE_DIR/"
 cp config.py "$RELEASE_DIR/"
 cp log_parser.py "$RELEASE_DIR/"
 cp docker_monitor.py "$RELEASE_DIR/"
-cp http_monitor.py "$RELEASE_DIR/"
 cp requirements.txt "$RELEASE_DIR/"
 cp install.sh "$RELEASE_DIR/"
 cp upgrade.sh "$RELEASE_DIR/"
@@ -72,18 +71,7 @@ cat > "$RELEASE_DIR/agent_config.json.example" << 'EOF'
   "collect_metrics": true,
   "metrics_interval": 300,
   "collect_docker_metrics": true,
-  "docker_metrics_interval": 60,
-  "collect_http_checks": true,
-  "http_check_interval": 60,
-  "http_services": [
-    {
-      "name": "My Web App",
-      "url": "https://example.com",
-      "method": "GET",
-      "timeout": 10,
-      "expected_status": 200
-    }
-  ]
+  "docker_metrics_interval": 60
 }
 EOF
 

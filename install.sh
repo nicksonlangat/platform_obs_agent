@@ -113,7 +113,6 @@ setup_agent_files() {
     cp config.py "$AGENT_DIR/"
     cp log_parser.py "$AGENT_DIR/"
     cp docker_monitor.py "$AGENT_DIR/"
-    cp http_monitor.py "$AGENT_DIR/"
     cp requirements.txt "$AGENT_DIR/"
 
     # Make agent executable

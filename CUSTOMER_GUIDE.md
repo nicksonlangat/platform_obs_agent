@@ -226,7 +226,7 @@ The simplest configuration - just API token:
 
 ### Advanced Configuration (Optional)
 
-Add monitoring for logs, Docker, and HTTP services:
+Add monitoring for logs and Docker:
 
 ```json
 {
@@ -245,24 +245,6 @@ Add monitoring for logs, Docker, and HTTP services:
   "collect_docker_metrics": true,
   "docker_metrics_interval": 60,
 
-  "collect_http_checks": true,
-  "http_check_interval": 60,
-  "http_services": [
-    {
-      "name": "My Website",
-      "url": "https://example.com",
-      "method": "GET",
-      "timeout": 10,
-      "expected_status": 200
-    },
-    {
-      "name": "API Health",
-      "url": "https://api.example.com/health",
-      "method": "GET",
-      "timeout": 5
-    }
-  ],
-
   "log_level": "INFO"
 }
 ```
@@ -278,9 +260,6 @@ Add monitoring for logs, Docker, and HTTP services:
 | `metrics_interval` | Seconds between metric collections | `300` | No |
 | `collect_docker_metrics` | Enable Docker monitoring | `true` | No |
 | `docker_metrics_interval` | Seconds between Docker checks | `60` | No |
-| `collect_http_checks` | Enable HTTP health checks | `false` | No |
-| `http_check_interval` | Seconds between HTTP checks | `60` | No |
-| `http_services` | Array of URLs to monitor | `[]` | No |
 | `log_level` | Logging verbosity | `INFO` | No |
 
 ### Update Configuration
@@ -460,8 +439,7 @@ python3 agent.py --test-config
 3. **Disable unnecessary features:**
    ```json
    {
-     "collect_docker_metrics": false,
-     "collect_http_checks": false
+     "collect_docker_metrics": false
    }
    ```
 
@@ -625,7 +603,6 @@ The agent collects:
 - **Server Metrics**: CPU, memory, disk usage, network stats
 - **System Info**: OS, hostname, uptime
 - **Docker Metrics**: Container status, resource usage (if Docker is installed)
-- **HTTP Checks**: Response time, status codes (if configured)
 - **Log Files**: Application logs (if configured)
 
 **Not collected:**
@@ -655,7 +632,6 @@ The agent collects:
 - ✅ Auto-discovery (no manual log source creation)
 - ✅ Server metrics monitoring
 - ✅ Docker monitoring
-- ✅ HTTP health checks
 
 ---
 

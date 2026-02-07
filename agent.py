@@ -30,8 +30,6 @@ except ImportError:
     DOCKER_MONITOR_AVAILABLE = False
     print("Warning: Docker monitor not available.")
 
-from http_monitor import HttpMonitor
-
 class ObservabilityAgent:
     def __init__(self):
         self.config = Config()
@@ -46,9 +44,6 @@ class ObservabilityAgent:
         else:
             self.docker_monitor = None
 
-        # Initialize HTTP monitor (always available - uses requests)
-        self.http_monitor = HttpMonitor(self.config)
-        
         logging.basicConfig(
             level=getattr(logging, self.config.get('log_level', 'INFO')),
             format='%(asctime)s - %(levelname)s - %(message)s'
@@ -103,16 +98,6 @@ class ObservabilityAgent:
             self.logger.info("Docker container monitoring enabled")
         else:
             self.logger.info("Docker container monitoring disabled")
-
-        # Start HTTP monitoring thread (if enabled and services configured)
-        http_services = self.config.get('http_services', [])
-        if self.config.get('collect_http_checks', True) and http_services:
-            http_thread = threading.Thread(target=self._http_monitoring_loop)
-            http_thread.daemon = True
-            http_thread.start()
-            self.logger.info(f"HTTP service monitoring enabled ({len(http_services)} services)")
-        else:
-            self.logger.info("HTTP service monitoring disabled")
 
         # Main loop
         try:
@@ -526,21 +511,6 @@ class ObservabilityAgent:
                     self.logger.debug(f"Sent metrics for {len(containers)} containers")
             except Exception as e:
                 self.logger.error(f"Error in Docker monitoring loop: {e}")
-            time.sleep(interval)
-
-    def _http_monitoring_loop(self):
-        """Periodically check HTTP services and send results"""
-        interval = self.config.get('http_check_interval', 60)
-        self.logger.info(f"Starting HTTP monitoring loop (interval: {interval}s)")
-
-        while self.running:
-            try:
-                results = self.http_monitor.check_all_services()
-                if results:
-                    self.http_monitor.send_check_results(results)
-                    self.logger.debug(f"Sent {len(results)} HTTP check results")
-            except Exception as e:
-                self.logger.error(f"Error in HTTP monitoring loop: {e}")
             time.sleep(interval)
 
     def _signal_handler(self, signum, frame):
