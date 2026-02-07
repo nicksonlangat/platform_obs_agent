@@ -52,6 +52,7 @@ chmod +x "$RELEASE_DIR/agent.py"
 log "Copying documentation..."
 cp README.md "$RELEASE_DIR/" 2>/dev/null || true
 cp INSTALL.md "$RELEASE_DIR/" 2>/dev/null || true
+cp CUSTOMER_GUIDE.md "$RELEASE_DIR/" 2>/dev/null || true
 
 # Create example config (without sensitive data)
 log "Creating example configuration..."
