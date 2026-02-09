@@ -57,7 +57,7 @@ cp CUSTOMER_GUIDE.md "$RELEASE_DIR/" 2>/dev/null || true
 log "Creating example configuration..."
 cat > "$RELEASE_DIR/agent_config.json.example" << 'EOF'
 {
-  "api_endpoint": "https://your-platform-api.com/api",
+  "api_endpoint": "https://api.watchdock.cc/api",
   "api_token": "pos_your-organization-api-token-here",
   "log_files": [
     "/var/log/application.log",
@@ -95,7 +95,7 @@ Copy the example config and edit it with your details:
     nano agent_config.json
 
 Required fields:
-  • api_endpoint: Your platform API URL
+  • api_endpoint: https://api.watchdock.cc/api
   • api_token: Your organization API token (from dashboard)
 
 The agent will automatically detect and register your server!

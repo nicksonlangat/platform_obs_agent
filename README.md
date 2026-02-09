@@ -66,7 +66,7 @@ Edit `agent_config.json`:
 ### Required
 | Key | Description |
 |---|---|
-| `api_endpoint` | Platform API URL (e.g. `https://your-domain.com/api`) |
+| `api_endpoint` | Platform API URL (`https://api.watchdock.cc/api`) |
 | `api_token` | Organization API token (starts with `pos_`) |
 | `log_source_id` | UUID of your log source from the dashboard |
 

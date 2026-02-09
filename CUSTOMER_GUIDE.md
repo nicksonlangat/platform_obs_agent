@@ -53,14 +53,13 @@ Create the configuration file with your API credentials:
 ```bash
 cat > agent_config.json << 'EOF'
 {
-  "api_endpoint": "https://your-platform-api.com/api",
+  "api_endpoint": "https://api.watchdock.cc/api",
   "api_token": "pos_YOUR_API_TOKEN_HERE"
 }
 EOF
 ```
 
 **Replace:**
-- `https://your-platform-api.com/api` with your actual API endpoint
 - `pos_YOUR_API_TOKEN_HERE` with your API token from Step 1
 
 **That's it!** The agent will automatically:
@@ -219,7 +218,7 @@ The simplest configuration - just API token:
 
 ```json
 {
-  "api_endpoint": "https://your-api.com/api",
+  "api_endpoint": "https://api.watchdock.cc/api",
   "api_token": "pos_YOUR_TOKEN"
 }
 ```
@@ -230,7 +229,7 @@ Add monitoring for logs and Docker:
 
 ```json
 {
-  "api_endpoint": "https://your-api.com/api",
+  "api_endpoint": "https://api.watchdock.cc/api",
   "api_token": "pos_YOUR_TOKEN",
 
   "log_files": [
@@ -249,11 +248,13 @@ Add monitoring for logs and Docker:
 }
 ```
 
+**Note:** HTTP health checks are now managed through the WatchDock dashboard, not the agent configuration. Add and configure HTTP monitors directly in your dashboard under Monitoring → HTTP Checks.
+
 ### Configuration Options
 
 | Option | Description | Default | Required |
 |--------|-------------|---------|----------|
-| `api_endpoint` | Your platform API URL | - | ✅ Yes |
+| `api_endpoint` | Platform API URL (https://api.watchdock.cc/api) | - | ✅ Yes |
 | `api_token` | Organization API token | - | ✅ Yes |
 | `log_files` | Array of log file paths to monitor | `[]` | No |
 | `collect_metrics` | Enable server metrics collection | `true` | No |
@@ -605,6 +606,8 @@ The agent collects:
 - **Docker Metrics**: Container status, resource usage (if Docker is installed)
 - **Log Files**: Application logs (if configured)
 
+**HTTP Health Checks** are managed separately from the dashboard and run from the WatchDock backend, not from the agent.
+
 **Not collected:**
 - File contents (except specified log files)
 - Environment variables
@@ -616,7 +619,19 @@ The agent collects:
 
 ## 📝 Changelog
 
-### v1.0.3 (Latest)
+### v1.0.9 (Latest)
+- ✅ Removed HTTP checks from agent (now managed via WatchDock dashboard)
+- ✅ Updated API endpoint to api.watchdock.cc
+- ✅ Simplified agent configuration
+
+### v1.0.8
+- ✅ Previous release
+
+### v1.0.7
+- ✅ Fixed API endpoint in configuration test
+- ✅ Fixed authentication header format
+
+### v1.0.3
 - ✅ Fix: Include all required Python modules during installation
 - ✅ Improved error handling
 
@@ -636,4 +651,4 @@ The agent collects:
 ---
 
 **Last Updated**: February 2026
-**Agent Version**: 1.0.3
+**Agent Version**: 1.0.9
