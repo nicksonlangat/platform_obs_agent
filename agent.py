@@ -30,6 +30,12 @@ except ImportError:
     DOCKER_MONITOR_AVAILABLE = False
     print("Warning: Docker monitor not available.")
 
+try:
+    from container_log_collector import ContainerLogCollector
+    CONTAINER_LOG_COLLECTOR_AVAILABLE = True
+except ImportError:
+    CONTAINER_LOG_COLLECTOR_AVAILABLE = False
+
 class ObservabilityAgent:
     def __init__(self):
         self.config = Config()
@@ -43,6 +49,12 @@ class ObservabilityAgent:
             self.docker_monitor = DockerMonitor(self.config)
         else:
             self.docker_monitor = None
+
+        # Initialize container log collector if available
+        if CONTAINER_LOG_COLLECTOR_AVAILABLE:
+            self.container_log_collector = ContainerLogCollector(self.config)
+        else:
+            self.container_log_collector = None
 
         logging.basicConfig(
             level=getattr(logging, self.config.get('log_level', 'INFO')),
@@ -98,6 +110,16 @@ class ObservabilityAgent:
             self.logger.info("Docker container monitoring enabled")
         else:
             self.logger.info("Docker container monitoring disabled")
+
+        # Start container log collection thread (if enabled and Docker available)
+        if (self.config.get('collect_container_logs', True) and
+            CONTAINER_LOG_COLLECTOR_AVAILABLE and self.container_log_collector):
+            log_collector_thread = threading.Thread(target=self._container_log_collection_loop)
+            log_collector_thread.daemon = True
+            log_collector_thread.start()
+            self.logger.info("Container log collection enabled")
+        else:
+            self.logger.info("Container log collection disabled")
 
         # Main loop
         try:
@@ -511,6 +533,21 @@ class ObservabilityAgent:
                     self.logger.debug(f"Sent metrics for {len(containers)} containers")
             except Exception as e:
                 self.logger.error(f"Error in Docker monitoring loop: {e}")
+            time.sleep(interval)
+
+    def _container_log_collection_loop(self):
+        """Periodically collect and send Docker container logs"""
+        interval = self.config.get('container_log_interval', 30)
+        self.logger.info(f"Starting container log collection loop (interval: {interval}s)")
+
+        while self.running:
+            try:
+                logs = self.container_log_collector.collect_logs()
+                if logs:
+                    self.container_log_collector.send_logs(logs)
+                    self.logger.debug(f"Sent {len(logs)} container log entries")
+            except Exception as e:
+                self.logger.error(f"Error in container log collection loop: {e}")
             time.sleep(interval)
 
     def _signal_handler(self, signum, frame):

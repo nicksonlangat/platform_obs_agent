@@ -30,7 +30,10 @@ class Config:
             "docker_metrics_interval": 60,
             "collect_http_checks": True,
             "http_check_interval": 60,
-            "http_services": []
+            "http_services": [],
+            "collect_container_logs": True,
+            "container_log_interval": 30,
+            "container_log_max_lines": 500
         }
 
         self._save_config(default_config)
