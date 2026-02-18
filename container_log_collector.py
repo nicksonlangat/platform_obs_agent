@@ -117,10 +117,11 @@ class ContainerLogCollector:
 
         entries = []
 
-        # Process stderr (always capture all stderr lines)
+        # Process stderr (capture tracebacks + lines matching error keywords)
         if result.stderr:
             stderr_entries = self._process_log_output(
-                result.stderr, container_id, name, image, stream="stderr"
+                result.stderr, container_id, name, image, stream="stderr",
+                filter_keywords=True
             )
             entries.extend(stderr_entries)
 
