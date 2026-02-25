@@ -1,8 +1,20 @@
 import json
+import logging
 import os
 import socket
 import uuid
-from typing import Dict, Any
+from typing import Any, Dict
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+AGENT_CONFIG_KEYS = (
+    "metrics_interval",
+    "docker_metrics_interval",
+    "http_check_interval",
+    "container_log_interval",
+)
 
 class Config:
     def __init__(self, config_file: str = "agent_config.json"):
@@ -93,6 +105,37 @@ class Config:
             self._hostname = 'unknown-host'
 
         return self._hostname
+
+    def fetch_server_config(self) -> bool:
+        api_endpoint = self.config.get("api_endpoint", "").rstrip("/")
+        api_token = self.config.get("api_token", "")
+        if not api_endpoint or not api_token:
+            return False
+
+        try:
+            response = requests.get(
+                f"{api_endpoint}/agent/config/",
+                headers={"Authorization": f"Token {api_token}"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            server_config = response.json()
+
+            updated = False
+            for key in AGENT_CONFIG_KEYS:
+                if key in server_config:
+                    self.config[key] = server_config[key]
+                    updated = True
+
+            if updated:
+                self._save_config(self.config)
+                logger.info("Agent config updated from server (plan: %s)", server_config.get("plan", "unknown"))
+
+            return True
+
+        except Exception as exc:
+            logger.warning("Could not fetch server config, using local defaults: %s", exc)
+            return False
 
     def validate(self) -> bool:
         """Validate only api_token is required now (auto-discovery handles the rest)"""

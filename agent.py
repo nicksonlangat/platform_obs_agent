@@ -69,7 +69,9 @@ class ObservabilityAgent:
         if not self.config.validate():
             self.logger.error("Invalid configuration. Please check agent_config.json")
             sys.exit(1)
-        
+
+        self.config.fetch_server_config()
+
         self.running = True
         self.logger.info("Starting Observability Agent...")
         
@@ -321,7 +323,7 @@ class ObservabilityAgent:
             'machine_id': self.config.get_machine_id(),
             'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
-            'agent_version': '1.0.0'
+            'agent_version': '1.1.2'
         }
 
         try:
