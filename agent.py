@@ -634,7 +634,7 @@ def test_configuration():
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description='Platform Observability Agent')
+    parser = argparse.ArgumentParser(description='WatchDock Agent')
     parser.add_argument('--test-config', action='store_true',
                        help='Test configuration and exit')
     parser.add_argument('--config', default='agent_config.json',
