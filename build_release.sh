@@ -118,11 +118,11 @@ STEP 3: Verify Installation
 ────────────────────────────────────────────────────────────────
 Check agent status:
 
-    sudo systemctl status platform-obs-agent
+    sudo systemctl status watchdock-agent
 
 View logs:
 
-    sudo journalctl -u platform-obs-agent -f
+    sudo journalctl -u watchdock-agent -f
 
 MANAGEMENT COMMANDS
 ────────────────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ TROUBLESHOOTING
 ────────────────────────────────────────────────────────────────
 If the agent fails to start:
 
-1. Check logs: sudo journalctl -u platform-obs-agent -n 50
+1. Check logs: sudo journalctl -u watchdock-agent -n 50
 2. Verify config: python3 agent.py --test-config
 3. Check connectivity: curl -I https://your-api-endpoint.com
 

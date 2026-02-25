@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Platform Observability Agent - Upgrade Script
+# WatchDock Agent - Upgrade Script
 # Usage: sudo ./upgrade.sh [version]
 # Example: sudo ./upgrade.sh 1.0.1
 
 set -e
 
 VERSION="${1:-latest}"
-AGENT_DIR="/opt/platform-obs-agent"
-SERVICE_NAME="platform-obs-agent"
-BACKUP_DIR="/opt/platform-obs-agent-backup-$(date +%Y%m%d-%H%M%S)"
+AGENT_DIR="/opt/watchdock-agent"
+SERVICE_NAME="watchdock-agent"
+BACKUP_DIR="/opt/watchdock-agent-backup-$(date +%Y%m%d-%H%M%S)"
 REPO_URL="https://github.com/nicksonlangat/platform_obs_agent"
 
 # Colors
@@ -39,7 +39,7 @@ fi
 
 # Show banner
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Platform Observability Agent - Upgrade Tool${NC}"
+echo -e "${BLUE}          WatchDock Agent - Upgrade Tool${NC}"
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
 echo
 
@@ -81,9 +81,9 @@ TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
 if [[ "$VERSION" == "latest" ]]; then
-    DOWNLOAD_URL="${REPO_URL}/releases/latest/download/platform-obs-agent-latest.tar.gz"
+    DOWNLOAD_URL="${REPO_URL}/releases/latest/download/watchdock-agent-latest.tar.gz"
 else
-    DOWNLOAD_URL="${REPO_URL}/releases/download/agent-v${VERSION}/platform-obs-agent-${VERSION}.tar.gz"
+    DOWNLOAD_URL="${REPO_URL}/releases/download/agent-v${VERSION}/watchdock-agent-${VERSION}.tar.gz"
 fi
 
 if ! curl -sSL "$DOWNLOAD_URL" -o agent.tar.gz; then
@@ -93,7 +93,7 @@ fi
 # Extract
 log "Extracting new version..."
 tar -xzf agent.tar.gz
-cd platform-obs-agent-*/
+cd watchdock-agent-*/
 
 # Get new version number
 NEW_VERSION="$VERSION"

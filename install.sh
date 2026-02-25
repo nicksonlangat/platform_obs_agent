@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Platform Observability Agent - Automated Installation Script
+# WatchDock Agent - Automated Installation Script
 # Usage: sudo ./install.sh
 
 set -e
@@ -13,8 +13,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-AGENT_DIR="/opt/platform-obs-agent"
-SERVICE_NAME="platform-obs-agent"
+AGENT_DIR="/opt/watchdock-agent"
+SERVICE_NAME="watchdock-agent"
 CONFIG_FILE="agent_config.json"
 
 # Logging function
@@ -190,7 +190,7 @@ setup_log_directories() {
     log "Setting up log directories and permissions..."
 
     # Common log directories
-    mkdir -p /var/log/nginx /var/log/gunicorn /var/log/platform-obs-agent
+    mkdir -p /var/log/nginx /var/log/gunicorn /var/log/watchdock-agent
 
     # Set permissions for common web server users
     if id "nginx" &>/dev/null; then
@@ -202,8 +202,8 @@ setup_log_directories() {
     fi
 
     # Create agent log file
-    touch /var/log/platform-obs-agent/agent.log
-    chmod 644 /var/log/platform-obs-agent/agent.log
+    touch /var/log/watchdock-agent/agent.log
+    chmod 644 /var/log/watchdock-agent/agent.log
 }
 
 # Create systemd service
@@ -215,8 +215,8 @@ create_service() {
 
     cat > "/etc/systemd/system/$SERVICE_NAME.service" << EOF
 [Unit]
-Description=Platform Observability Log Agent
-Documentation=https://github.com/your-org/platform-observability-platform
+Description=WatchDock Agent
+Documentation=https://watchdock.cc
 After=network.target
 Wants=network.target
 
@@ -255,8 +255,8 @@ EOF
 setup_logrotate() {
     log "Setting up log rotation..."
 
-    cat > "/etc/logrotate.d/platform-obs-agent" << EOF
-/var/log/platform-obs-agent/*.log {
+    cat > "/etc/logrotate.d/watchdock-agent" << EOF
+/var/log/watchdock-agent/*.log {
     daily
     rotate 7
     compress
@@ -288,7 +288,7 @@ test_agent() {
 
 # Start the service
 start_service() {
-    log "Starting Platform Observability Agent..."
+    log "Starting WatchDock Agent..."
 
     systemctl start "$SERVICE_NAME"
     sleep 2
@@ -309,7 +309,7 @@ start_service() {
 
 # Show usage information
 show_usage() {
-    echo "Platform Observability Agent Installer"
+    echo "WatchDock Agent Installer"
     echo
     echo "Usage: sudo ./install.sh [options]"
     echo
@@ -325,7 +325,7 @@ show_usage() {
 
 # Uninstall function
 uninstall_agent() {
-    log "Uninstalling Platform Observability Agent..."
+    log "Uninstalling WatchDock Agent..."
 
     # Stop and disable service
     systemctl stop "$SERVICE_NAME" 2>/dev/null || true
@@ -339,7 +339,7 @@ uninstall_agent() {
     rm -rf "$AGENT_DIR"
 
     # Remove log rotation
-    rm -f "/etc/logrotate.d/platform-obs-agent"
+    rm -f "/etc/logrotate.d/watchdock-agent"
 
     log "Agent uninstalled successfully"
 }
@@ -347,8 +347,8 @@ uninstall_agent() {
 # Main installation process
 main() {
     echo -e "${BLUE}================================${NC}"
-    echo -e "${BLUE} Platform Observability Agent  ${NC}"
-    echo -e "${BLUE}     Automated Installer       ${NC}"
+    echo -e "${BLUE}      WatchDock Agent           ${NC}"
+    echo -e "${BLUE}     Automated Installer        ${NC}"
     echo -e "${BLUE}================================${NC}"
     echo
 

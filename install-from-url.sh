@@ -1,13 +1,13 @@
 #!/bin/bash
-# One-line installer for Platform Observability Agent
-# Usage: curl -sSL https://your-site.com/install.sh | sudo bash -s YOUR_API_TOKEN
+# One-line installer for WatchDock Agent
+# Usage: curl -sSL https://api.watchdock.cc/install.sh | WATCHDOCK_API_TOKEN=pos_xxx sudo -E bash
 
 set -e
 
 API_TOKEN="${1}"
 VERSION="${2:-latest}"
 REPO_URL="https://github.com/nicksonlangat/platform_obs_agent"
-DOWNLOAD_URL="${REPO_URL}/releases/download/agent-v${VERSION}/platform-obs-agent-${VERSION}.tar.gz"
+DOWNLOAD_URL="${REPO_URL}/releases/download/agent-v${VERSION}/watchdock-agent-${VERSION}.tar.gz"
 
 # Colors
 RED='\033[0;31m'
@@ -37,12 +37,12 @@ fi
 
 # Show banner
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Platform Observability Agent - Quick Installer${NC}"
+echo -e "${BLUE}        WatchDock Agent - Quick Installer${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo
 
 log "Downloading agent version: $VERSION"
-log "Installing to: /opt/platform-obs-agent"
+log "Installing to: /opt/watchdock-agent"
 echo
 
 # Create temp directory
@@ -51,7 +51,7 @@ cd "$TEMP_DIR"
 
 # Download
 if [[ "$VERSION" == "latest" ]]; then
-    DOWNLOAD_URL="${REPO_URL}/releases/latest/download/platform-obs-agent-latest.tar.gz"
+    DOWNLOAD_URL="${REPO_URL}/releases/latest/download/watchdock-agent-latest.tar.gz"
 fi
 
 log "Downloading from: $DOWNLOAD_URL"
@@ -62,13 +62,13 @@ fi
 # Extract
 log "Extracting..."
 tar -xzf agent.tar.gz
-cd platform-obs-agent-*/
+cd watchdock-agent-*/
 
 # Create config
 log "Creating configuration..."
 cat > agent_config.json << EOF
 {
-  "api_endpoint": "https://your-platform-api.com/api",
+  "api_endpoint": "https://api.watchdock.cc/api",
   "api_token": "${API_TOKEN}",
   "log_files": [],
   "collect_metrics": true,
@@ -96,10 +96,10 @@ echo -e "${GREEN}✓ Installation complete!${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
 echo
 log "Service status:"
-systemctl status platform-obs-agent --no-pager | head -n 3
+systemctl status watchdock-agent --no-pager | head -n 3
 echo
-log "View logs: journalctl -u platform-obs-agent -f"
-log "Manage: sudo systemctl [start|stop|restart|status] platform-obs-agent"
+log "View logs: journalctl -u watchdock-agent -f"
+log "Manage: sudo systemctl [start|stop|restart|status] watchdock-agent"
 echo
 echo -e "${GREEN}Your server will appear in the dashboard within 60 seconds!${NC}"
 echo
