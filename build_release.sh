@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Platform Observability Agent - Release Builder
+# WatchDock Agent - Release Builder
 # Creates a distributable tarball for customer deployment
 
 set -e
@@ -8,7 +8,7 @@ set -e
 # Configuration
 AGENT_VERSION="${1:-1.0.0}"
 BUILD_DIR="build"
-RELEASE_NAME="platform-obs-agent-${AGENT_VERSION}"
+RELEASE_NAME="watchdock-agent-${AGENT_VERSION}"
 RELEASE_DIR="${BUILD_DIR}/${RELEASE_NAME}"
 OUTPUT_FILE="${RELEASE_NAME}.tar.gz"
 

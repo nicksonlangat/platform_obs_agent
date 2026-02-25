@@ -3,19 +3,18 @@ name: Release Agent
 on:
   push:
     tags:
-      - 'agent-v*'  # Triggers on tags like agent-v1.0.0
-  workflow_dispatch:  # Allows manual trigger
+      - 'agent-v*'
+  workflow_dispatch:
     inputs:
       version:
-        description: 'Agent version (e.g., 1.0.0)'
+        description: 'Agent version (e.g., 1.2.0)'
         required: true
-        default: '1.0.0'
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required to create releases
+      contents: write
 
     steps:
       - name: Checkout code
@@ -30,7 +29,6 @@ jobs:
             VERSION=${{ github.event.inputs.version }}
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
 
       - name: Build release package
         run: |
@@ -39,13 +37,9 @@ jobs:
 
       - name: Verify package
         run: |
-          PACKAGE="platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz"
-          if [ ! -f "$PACKAGE" ]; then
-            echo "Error: Package not found: $PACKAGE"
-            exit 1
-          fi
-          echo "Package created: $PACKAGE"
-          echo "Package size: $(du -h $PACKAGE | awk '{print $1}')"
+          PACKAGE="watchdock-agent-${{ steps.version.outputs.version }}.tar.gz"
+          [ -f "$PACKAGE" ] || { echo "Package not found: $PACKAGE"; exit 1; }
+          echo "Package: $PACKAGE ($(du -h $PACKAGE | awk '{print $1}'))"
           echo "SHA256: $(sha256sum $PACKAGE | awk '{print $1}')"
 
       - name: Create GitHub Release
@@ -54,60 +48,27 @@ jobs:
           tag_name: agent-v${{ steps.version.outputs.version }}
           name: Agent v${{ steps.version.outputs.version }}
           body: |
-            ## Platform Observability Agent v${{ steps.version.outputs.version }}
+            ## WatchDock Agent v${{ steps.version.outputs.version }}
 
-            ### Installation
+            ### Install
 
             ```bash
-            # Download and extract
-            wget https://github.com/${{ github.repository }}/releases/download/agent-v${{ steps.version.outputs.version }}/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
-            tar -xzf platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
-            cd platform-obs-agent-${{ steps.version.outputs.version }}
-
-            # Configure (only API token needed - auto-discovery enabled!)
-            cp agent_config.json.example agent_config.json
-            nano agent_config.json  # Add your API token
-
-            # Install
-            sudo ./install.sh
+            curl -fsSL https://api.watchdock.cc/install.sh | WATCHDOCK_API_TOKEN=pos_your_token_here sudo -E bash
             ```
 
-            ### What's New
-            - ✅ **Auto-Discovery**: No more manual log source creation! Agent automatically registers itself
-            - ✅ **Simplified Config**: Only requires `api_token` - machine ID detected automatically
-            - ✅ **Improved Stability**: Better error handling and retry logic
+            ### Upgrade (existing installation)
 
-            ### Features
-            - 🚀 One-command installation
-            - 📊 Server metrics collection
-            - 🐳 Docker container monitoring
-            - 📝 Log file ingestion
-            - 🔄 Auto-restart on crash
-            - 📦 Automatic log rotation
-
-            ### System Requirements
-            - Linux (Ubuntu, Debian, CentOS, RHEL, Amazon Linux)
-            - Python 3.7+
-            - systemd
+            ```bash
+            curl -fsSL https://api.watchdock.cc/upgrade.sh | sudo bash
+            ```
 
             ### Documentation
-            - [Installation Guide](https://github.com/${{ github.repository }}/blob/main/INSTALL.md)
-            - [Configuration](https://github.com/${{ github.repository }}/blob/main/README.md)
-            - [Troubleshooting](https://github.com/${{ github.repository }}/blob/main/TROUBLESHOOTING.md)
 
-            ### Checksums
-            ```
-            SHA256: $(cat platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz | sha256sum | awk '{print $1}')
-            ```
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for configuration and management.
           files: |
-            platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz
+            watchdock-agent-${{ steps.version.outputs.version }}.tar.gz
             build/release-info.txt
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Notify success
-        run: |
-          echo "✓ Release created successfully!"
-          echo "Download URL: https://github.com/${{ github.repository }}/releases/download/agent-v${{ steps.version.outputs.version }}/platform-obs-agent-${{ steps.version.outputs.version }}.tar.gz"
