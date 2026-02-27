@@ -34,9 +34,9 @@ mkdir -p "$RELEASE_DIR"
 log "Copying agent files..."
 cp agent.py "$RELEASE_DIR/"
 cp config.py "$RELEASE_DIR/"
-cp log_parser.py "$RELEASE_DIR/"
 cp docker_monitor.py "$RELEASE_DIR/"
 cp container_log_collector.py "$RELEASE_DIR/"
+cp nginx_log_collector.py "$RELEASE_DIR/"
 cp requirements.txt "$RELEASE_DIR/"
 cp install.sh "$RELEASE_DIR/"
 cp upgrade.sh "$RELEASE_DIR/"
@@ -56,25 +56,7 @@ cp CUSTOMER_GUIDE.md "$RELEASE_DIR/" 2>/dev/null || true
 
 # Create example config (without sensitive data)
 log "Creating example configuration..."
-cat > "$RELEASE_DIR/agent_config.json.example" << 'EOF'
-{
-  "api_endpoint": "https://api.watchdock.cc/api",
-  "api_token": "pos_your-organization-api-token-here",
-  "log_files": [
-    "/var/log/application.log",
-    "/var/log/nginx/access.log"
-  ],
-  "heartbeat_interval": 60,
-  "batch_size": 100,
-  "flush_interval": 10,
-  "poll_interval": 2,
-  "log_level": "INFO",
-  "collect_metrics": true,
-  "metrics_interval": 300,
-  "collect_docker_metrics": true,
-  "docker_metrics_interval": 60
-}
-EOF
+cp agent_config.json.example "$RELEASE_DIR/"
 
 # Create VERSION file
 log "Creating version file..."
