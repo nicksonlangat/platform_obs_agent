@@ -144,7 +144,7 @@ class ObservabilityAgent:
             'machine_id': self.config.get_machine_id(),
             'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
-            'agent_version': '1.1.6'
+            'agent_version': '1.1.7'
         }
 
         try:

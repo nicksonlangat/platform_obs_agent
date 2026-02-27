@@ -2,14 +2,14 @@
 """
 Nginx log collector.
 Tails nginx access and error log files, parses lines using the watchdock log format,
-aggregates access data into 1-minute buckets per endpoint, and sends to WatchDock.
+and sends raw per-request access events and error events to WatchDock.
 """
 
 import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -33,8 +33,8 @@ ERROR_LOG_RE = re.compile(
 class NginxLogCollector:
     """
     Reads nginx access and error log files for each configured NginxLogSource,
-    parses new lines since the last collection, aggregates access data into
-    1-minute buckets, and sends them to the WatchDock backend.
+    parses new lines since the last collection, and sends raw per-request events
+    and error events to the WatchDock backend.
     """
 
     def __init__(self, config):
@@ -51,8 +51,8 @@ class NginxLogCollector:
     def collect_and_send(self) -> None:
         """
         Called once per nginx_interval. For every configured NginxLogSource,
-        reads new lines from its access and error log files, aggregates/parses
-        them, and sends to the backend.
+        reads new lines from its access and error log files, parses them,
+        and sends to the backend.
         """
         nginx_sources = self.config.get("nginx_sources", [])
         if not nginx_sources:
@@ -76,14 +76,14 @@ class NginxLogCollector:
             prefix = source.get("filter_path_prefix", "")
 
             access_lines = access_lines_by_path.get(source["access_log_path"], [])
-            buckets = self._aggregate_access_lines(access_lines, prefix)
-            if buckets:
-                self._send_access_metrics(source_id, buckets)
+            events = self._parse_access_lines(access_lines, prefix)
+            if events:
+                self._send_access_events(source_id, events)
 
             error_lines = error_lines_by_path.get(source["error_log_path"], [])
-            events = self._parse_error_lines(error_lines)
-            if events:
-                self._send_error_events(source_id, events)
+            error_events = self._parse_error_lines(error_lines)
+            if error_events:
+                self._send_error_events(source_id, error_events)
 
     # ------------------------------------------------------------------
     # File reading
@@ -127,19 +127,19 @@ class NginxLogCollector:
             return []
 
     # ------------------------------------------------------------------
-    # Access log parsing & aggregation
+    # Access log parsing
     # ------------------------------------------------------------------
 
     def _parse_access_line(self, line: str) -> Optional[dict]:
         """
-        Parse a single watchdock-format access log line.
-        Returns a dict with parsed fields, or None if the line doesn't match.
+        Parse a single watchdock-format access log line into a raw event dict.
+        Returns None if the line doesn't match.
         """
         match = ACCESS_LOG_RE.match(line)
         if not match:
             return None
 
-        _, time_local, method, raw_path, status_str, bytes_str, rt_str, up_str = (
+        ip_address, time_local, method, raw_path, status_str, bytes_str, rt_str, _ = (
             match.group(1),
             match.group(2),
             match.group(3),
@@ -156,107 +156,38 @@ class NginxLogCollector:
         except ValueError:
             return None
 
-        # Truncate to 1-minute bucket.
-        bucket_time = ts.replace(second=0, microsecond=0)
-
         # Strip query string from path.
         endpoint = urlparse(raw_path).path
 
         # Parse numeric fields.
-        status = int(status_str)
+        status_code = int(status_str)
         bytes_sent = int(bytes_str)
-        request_time = float(rt_str) if rt_str != "-" else None
-        upstream_time = float(up_str) if up_str != "-" else None
+        response_ms = round(float(rt_str) * 1000, 2) if rt_str != "-" else None
 
         return {
-            "bucket_time": bucket_time,
-            "endpoint": endpoint,
+            "timestamp": ts.isoformat(),
+            "ip_address": ip_address,
             "method": method.upper(),
-            "status": status,
+            "endpoint": endpoint,
+            "status_code": status_code,
+            "response_ms": response_ms,
             "bytes_sent": bytes_sent,
-            "request_time": request_time,   # seconds
-            "upstream_time": upstream_time,  # seconds
         }
 
-    def _aggregate_access_lines(
-        self, lines: List[str], prefix: str
-    ) -> List[dict]:
+    def _parse_access_lines(self, lines: List[str], prefix: str) -> List[dict]:
         """
-        Parse lines, filter by prefix, and aggregate into 1-minute buckets.
-        Returns a list of bucket dicts ready for the backend payload.
+        Parse access log lines into raw per-request event dicts.
+        Applies prefix filter (agent side) if configured.
         """
-        # buckets keyed by (bucket_time_iso, endpoint, method)
-        buckets: Dict[Tuple[str, str, str], dict] = {}
-
+        events: List[dict] = []
         for line in lines:
             parsed = self._parse_access_line(line)
             if parsed is None:
                 continue
-
-            endpoint = parsed["endpoint"]
-
-            # Apply path prefix filter (agent side).
-            if prefix and not endpoint.startswith(prefix):
+            if prefix and not parsed["endpoint"].startswith(prefix):
                 continue
-
-            bucket_time_iso = parsed["bucket_time"].isoformat()
-            key = (bucket_time_iso, endpoint, parsed["method"])
-
-            if key not in buckets:
-                buckets[key] = {
-                    "bucket_time": bucket_time_iso,
-                    "endpoint": endpoint,
-                    "method": parsed["method"],
-                    "status_2xx": 0,
-                    "status_3xx": 0,
-                    "status_4xx": 0,
-                    "status_5xx": 0,
-                    "request_count": 0,
-                    "_response_times": [],
-                    "_upstream_times": [],
-                    "total_bytes_sent": 0,
-                }
-
-            b = buckets[key]
-            b["request_count"] += 1
-            b["total_bytes_sent"] += parsed["bytes_sent"]
-
-            status_group = parsed["status"] // 100
-            if status_group == 2:
-                b["status_2xx"] += 1
-            elif status_group == 3:
-                b["status_3xx"] += 1
-            elif status_group == 4:
-                b["status_4xx"] += 1
-            elif status_group == 5:
-                b["status_5xx"] += 1
-
-            if parsed["request_time"] is not None:
-                b["_response_times"].append(parsed["request_time"])
-            if parsed["upstream_time"] is not None:
-                b["_upstream_times"].append(parsed["upstream_time"])
-
-        return [self._finalize_bucket(b) for b in buckets.values()]
-
-    def _finalize_bucket(self, b: dict) -> dict:
-        """Compute avg/p95/max from collected times, convert s → ms, remove internals."""
-        rtimes = b.pop("_response_times")
-        uptimes = b.pop("_upstream_times")
-
-        if rtimes:
-            b["avg_response_ms"] = round(sum(rtimes) / len(rtimes) * 1000, 2)
-            b["max_response_ms"] = round(max(rtimes) * 1000, 2)
-            b["p95_response_ms"] = round(self._percentile(rtimes, 95) * 1000, 2)
-        else:
-            b["avg_response_ms"] = None
-            b["max_response_ms"] = None
-            b["p95_response_ms"] = None
-
-        b["avg_upstream_ms"] = (
-            round(sum(uptimes) / len(uptimes) * 1000, 2) if uptimes else None
-        )
-
-        return b
+            events.append(parsed)
+        return events
 
     # ------------------------------------------------------------------
     # Error log parsing
@@ -290,12 +221,12 @@ class NginxLogCollector:
     # API calls
     # ------------------------------------------------------------------
 
-    def _send_access_metrics(self, source_id: str, buckets: List[dict]) -> None:
-        """POST aggregated access metric buckets to the backend."""
+    def _send_access_events(self, source_id: str, events: List[dict]) -> None:
+        """POST raw per-request access events to the backend."""
         try:
             response = requests.post(
-                f"{self.config.get('api_endpoint')}/core/agent/nginx-access-metrics/",
-                json={"nginx_log_source_id": source_id, "buckets": buckets},
+                f"{self.config.get('api_endpoint')}/core/agent/nginx-access-events/",
+                json={"nginx_log_source_id": source_id, "events": events},
                 headers={
                     "Authorization": f"Bearer {self.config.get('api_token')}",
                     "Content-Type": "application/json",
@@ -304,14 +235,14 @@ class NginxLogCollector:
             )
             if response.status_code in (200, 201):
                 self.logger.debug(
-                    f"Nginx access metrics sent: {len(buckets)} buckets for source {source_id}"
+                    f"Nginx access events sent: {len(events)} events for source {source_id}"
                 )
             else:
                 self.logger.warning(
-                    f"Failed to send nginx access metrics: {response.status_code} - {response.text}"
+                    f"Failed to send nginx access events: {response.status_code} - {response.text}"
                 )
         except Exception as e:
-            self.logger.error(f"Error sending nginx access metrics: {e}")
+            self.logger.error(f"Error sending nginx access events: {e}")
 
     def _send_error_events(self, source_id: str, events: List[dict]) -> None:
         """POST parsed error events to the backend."""
@@ -335,21 +266,3 @@ class NginxLogCollector:
                 )
         except Exception as e:
             self.logger.error(f"Error sending nginx error events: {e}")
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _percentile(data: List[float], pct: int) -> float:
-        """Linear interpolation percentile over a list of floats."""
-        sorted_data = sorted(data)
-        if len(sorted_data) == 1:
-            return sorted_data[0]
-        idx = (len(sorted_data) - 1) * pct / 100
-        lo = int(idx)
-        hi = lo + 1
-        if hi >= len(sorted_data):
-            return sorted_data[lo]
-        frac = idx - lo
-        return sorted_data[lo] + frac * (sorted_data[hi] - sorted_data[lo])
