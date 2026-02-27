@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 AGENT_CONFIG_KEYS = (
     "metrics_interval",
     "docker_metrics_interval",
-    "http_check_interval",
     "container_log_interval",
     "nginx_interval",
     "nginx_sources",
@@ -31,20 +30,13 @@ class Config:
                 return json.load(f)
 
         default_config = {
-            "api_endpoint": "http://localhost:8000/api",
+            "api_endpoint": "https://api.watchdock.cc/api",
             "api_token": "",
-            "log_files": [],
-            "heartbeat_interval": 60,
-            "batch_size": 100,
-            "flush_interval": 10,
             "log_level": "INFO",
             "collect_metrics": True,
             "metrics_interval": 300,
             "collect_docker_metrics": True,
             "docker_metrics_interval": 60,
-            "collect_http_checks": True,
-            "http_check_interval": 60,
-            "http_services": [],
             "collect_container_logs": True,
             "container_log_interval": 30,
             "container_log_max_lines": 500,
@@ -119,7 +111,8 @@ class Config:
         try:
             response = requests.get(
                 f"{api_endpoint}/agent/config/",
-                headers={"Authorization": f"Token {api_token}"},
+                headers={"Authorization": f"Bearer {api_token}"},
+                params={"machine_id": self.get_machine_id()},
                 timeout=10,
             )
             response.raise_for_status()

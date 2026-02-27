@@ -9,8 +9,8 @@ import logging
 import re
 import subprocess
 import requests
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Dict, List, Tuple
 
 
 class ContainerLogCollector:
