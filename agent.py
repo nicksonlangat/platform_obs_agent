@@ -114,15 +114,14 @@ class ObservabilityAgent:
         else:
             self.logger.info("Container log collection disabled")
 
-        # Start nginx log collection thread (if sources are configured)
-        nginx_sources = self.config.get('nginx_sources', [])
-        if NGINX_LOG_COLLECTOR_AVAILABLE and self.nginx_log_collector and nginx_sources:
+        # Start nginx log collection thread (collect_and_send handles empty sources gracefully)
+        if NGINX_LOG_COLLECTOR_AVAILABLE and self.nginx_log_collector:
             nginx_thread = threading.Thread(target=self._nginx_log_collection_loop)
             nginx_thread.daemon = True
             nginx_thread.start()
-            self.logger.info(f"Nginx log collection enabled ({len(nginx_sources)} source(s))")
+            self.logger.info("Nginx log collection enabled")
         else:
-            self.logger.info("Nginx log collection disabled (no sources configured)")
+            self.logger.info("Nginx log collection disabled")
 
         # Main loop
         try:
@@ -145,7 +144,7 @@ class ObservabilityAgent:
             'machine_id': self.config.get_machine_id(),
             'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
-            'agent_version': '1.1.4'
+            'agent_version': '1.1.6'
         }
 
         try:
@@ -281,16 +280,15 @@ class ObservabilityAgent:
 
     def _metrics_loop(self):
         """Periodically send server metrics"""
-        metrics_interval = self.config.get('metrics_interval', 300)  # Default 5 minutes
-        self.logger.info(f"Starting metrics collection loop (interval: {metrics_interval}s)")
+        self.logger.info("Starting metrics collection loop")
 
         while self.running:
+            self.config.fetch_server_config()
             try:
                 self._send_server_metrics()
-                time.sleep(metrics_interval)
             except Exception as e:
                 self.logger.error(f"Error in metrics loop: {e}")
-                time.sleep(60)  # Back off on error
+            time.sleep(self.config.get('metrics_interval', 300))
 
     def _get_server_ip(self) -> str:
         """Get the actual server IP address that would be used for external connections"""
@@ -346,10 +344,10 @@ class ObservabilityAgent:
 
     def _docker_monitoring_loop(self):
         """Periodically collect and send Docker container metrics"""
-        interval = self.config.get('docker_metrics_interval', 60)
-        self.logger.info(f"Starting Docker monitoring loop (interval: {interval}s)")
+        self.logger.info("Starting Docker monitoring loop")
 
         while self.running:
+            self.config.fetch_server_config()
             try:
                 containers = self.docker_monitor.collect_all_containers()
                 if containers:
@@ -357,14 +355,14 @@ class ObservabilityAgent:
                     self.logger.debug(f"Sent metrics for {len(containers)} containers")
             except Exception as e:
                 self.logger.error(f"Error in Docker monitoring loop: {e}")
-            time.sleep(interval)
+            time.sleep(self.config.get('docker_metrics_interval', 60))
 
     def _container_log_collection_loop(self):
         """Periodically collect and send Docker container logs"""
-        interval = self.config.get('container_log_interval', 30)
-        self.logger.info(f"Starting container log collection loop (interval: {interval}s)")
+        self.logger.info("Starting container log collection loop")
 
         while self.running:
+            self.config.fetch_server_config()
             try:
                 logs = self.container_log_collector.collect_logs()
                 if logs:
@@ -372,19 +370,19 @@ class ObservabilityAgent:
                     self.logger.debug(f"Sent {len(logs)} container log entries")
             except Exception as e:
                 self.logger.error(f"Error in container log collection loop: {e}")
-            time.sleep(interval)
+            time.sleep(self.config.get('container_log_interval', 30))
 
     def _nginx_log_collection_loop(self):
         """Periodically collect and send nginx access metrics and error events"""
-        interval = self.config.get('nginx_interval', 60)
-        self.logger.info(f"Starting nginx log collection loop (interval: {interval}s)")
+        self.logger.info("Starting nginx log collection loop")
 
         while self.running:
+            self.config.fetch_server_config()
             try:
                 self.nginx_log_collector.collect_and_send()
             except Exception as e:
                 self.logger.error(f"Error in nginx log collection loop: {e}")
-            time.sleep(interval)
+            time.sleep(self.config.get('nginx_interval', 60))
 
     def _signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}")

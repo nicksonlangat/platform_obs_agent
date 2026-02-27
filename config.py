@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import socket
+import time
 import uuid
 from typing import Any, Dict
 
@@ -17,12 +18,16 @@ AGENT_CONFIG_KEYS = (
     "nginx_sources",
 )
 
+MIN_REFRESH_INTERVAL = 30  # seconds — never hit the API more often than this
+
+
 class Config:
     def __init__(self, config_file: str = "agent_config.json"):
         self.config_file = config_file
         self.config = self._load_config()
         self._machine_id = None
         self._hostname = None
+        self._last_fetched: float = 0
 
     def _load_config(self) -> Dict[str, Any]:
         if os.path.exists(self.config_file):
@@ -102,7 +107,11 @@ class Config:
 
         return self._hostname
 
-    def fetch_server_config(self) -> bool:
+    def fetch_server_config(self, force: bool = False) -> bool:
+        now = time.monotonic()
+        if not force and (now - self._last_fetched) < MIN_REFRESH_INTERVAL:
+            return True  # Still fresh, skip
+
         api_endpoint = self.config.get("api_endpoint", "").rstrip("/")
         api_token = self.config.get("api_token", "")
         if not api_endpoint or not api_token:
@@ -128,6 +137,7 @@ class Config:
                 self._save_config(self.config)
                 logger.info("Agent config updated from server (plan: %s)", server_config.get("plan", "unknown"))
 
+            self._last_fetched = time.monotonic()
             return True
 
         except Exception as exc:
