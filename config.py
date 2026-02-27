@@ -14,6 +14,8 @@ AGENT_CONFIG_KEYS = (
     "docker_metrics_interval",
     "http_check_interval",
     "container_log_interval",
+    "nginx_interval",
+    "nginx_sources",
 )
 
 class Config:
@@ -45,7 +47,9 @@ class Config:
             "http_services": [],
             "collect_container_logs": True,
             "container_log_interval": 30,
-            "container_log_max_lines": 500
+            "container_log_max_lines": 500,
+            "nginx_interval": 60,
+            "nginx_sources": []
         }
 
         self._save_config(default_config)

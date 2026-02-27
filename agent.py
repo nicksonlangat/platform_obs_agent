@@ -36,6 +36,13 @@ try:
 except ImportError:
     CONTAINER_LOG_COLLECTOR_AVAILABLE = False
 
+try:
+    from nginx_log_collector import NginxLogCollector
+    NGINX_LOG_COLLECTOR_AVAILABLE = True
+except ImportError:
+    NGINX_LOG_COLLECTOR_AVAILABLE = False
+    print("Warning: Nginx log collector not available.")
+
 class ObservabilityAgent:
     def __init__(self):
         self.config = Config()
@@ -55,6 +62,12 @@ class ObservabilityAgent:
             self.container_log_collector = ContainerLogCollector(self.config)
         else:
             self.container_log_collector = None
+
+        # Initialize nginx log collector if available
+        if NGINX_LOG_COLLECTOR_AVAILABLE:
+            self.nginx_log_collector = NginxLogCollector(self.config)
+        else:
+            self.nginx_log_collector = None
 
         logging.basicConfig(
             level=getattr(logging, self.config.get('log_level', 'INFO')),
@@ -122,6 +135,16 @@ class ObservabilityAgent:
             self.logger.info("Container log collection enabled")
         else:
             self.logger.info("Container log collection disabled")
+
+        # Start nginx log collection thread (if sources are configured)
+        nginx_sources = self.config.get('nginx_sources', [])
+        if NGINX_LOG_COLLECTOR_AVAILABLE and self.nginx_log_collector and nginx_sources:
+            nginx_thread = threading.Thread(target=self._nginx_log_collection_loop)
+            nginx_thread.daemon = True
+            nginx_thread.start()
+            self.logger.info(f"Nginx log collection enabled ({len(nginx_sources)} source(s))")
+        else:
+            self.logger.info("Nginx log collection disabled (no sources configured)")
 
         # Main loop
         try:
@@ -323,7 +346,7 @@ class ObservabilityAgent:
             'machine_id': self.config.get_machine_id(),
             'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
-            'agent_version': '1.1.3'
+            'agent_version': '1.1.4'
         }
 
         try:
@@ -550,6 +573,18 @@ class ObservabilityAgent:
                     self.logger.debug(f"Sent {len(logs)} container log entries")
             except Exception as e:
                 self.logger.error(f"Error in container log collection loop: {e}")
+            time.sleep(interval)
+
+    def _nginx_log_collection_loop(self):
+        """Periodically collect and send nginx access metrics and error events"""
+        interval = self.config.get('nginx_interval', 60)
+        self.logger.info(f"Starting nginx log collection loop (interval: {interval}s)")
+
+        while self.running:
+            try:
+                self.nginx_log_collector.collect_and_send()
+            except Exception as e:
+                self.logger.error(f"Error in nginx log collection loop: {e}")
             time.sleep(interval)
 
     def _signal_handler(self, signum, frame):
