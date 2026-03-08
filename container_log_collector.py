@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Docker container log collector.
-Tails container logs (stderr + error-level stdout), detects tracebacks,
+Tails all container logs (stdout + stderr), detects tracebacks,
 and sends them to the WatchDock backend for processing and incident creation.
 """
 
@@ -15,17 +15,9 @@ from typing import Dict, List, Tuple
 
 class ContainerLogCollector:
     """
-    Collects Docker container logs focusing on:
-    - All stderr output
-    - stdout lines containing ERROR/CRITICAL/WARNING/Traceback/Exception keywords
+    Collects all Docker container logs (stdout + stderr).
     Groups multiline Python tracebacks into single entries.
     """
-
-    # Keywords that indicate an error/warning line worth capturing from stdout
-    ERROR_KEYWORDS = re.compile(
-        r'\b(ERROR|CRITICAL|FATAL|WARNING|WARN|Traceback|Exception|Error)\b',
-        re.IGNORECASE
-    )
 
     # Pattern to detect start of a Python traceback
     TRACEBACK_START = re.compile(r'^Traceback \(most recent call last\):')
@@ -117,21 +109,15 @@ class ContainerLogCollector:
 
         entries = []
 
-        # Process stderr (capture tracebacks + lines matching error keywords)
         if result.stderr:
-            stderr_entries = self._process_log_output(
-                result.stderr, container_id, name, image, stream="stderr",
-                filter_keywords=True
-            )
-            entries.extend(stderr_entries)
+            entries.extend(self._process_log_output(
+                result.stderr, container_id, name, image, stream="stderr"
+            ))
 
-        # Process stdout (only capture lines matching error keywords)
         if result.stdout:
-            stdout_entries = self._process_log_output(
-                result.stdout, container_id, name, image, stream="stdout",
-                filter_keywords=True
-            )
-            entries.extend(stdout_entries)
+            entries.extend(self._process_log_output(
+                result.stdout, container_id, name, image, stream="stdout"
+            ))
 
         return entries
 
@@ -142,7 +128,6 @@ class ContainerLogCollector:
         name: str,
         image: str,
         stream: str,
-        filter_keywords: bool = False,
     ) -> List[Dict]:
         """
         Process raw docker logs output into structured entries.
@@ -191,29 +176,15 @@ class ContainerLogCollector:
                 })
                 continue
 
-            # For non-traceback lines, apply keyword filter if needed
-            if filter_keywords:
-                if self.ERROR_KEYWORDS.search(log_text):
-                    entries.append({
-                        'container_id': container_id,
-                        'container_name': name,
-                        'image': image,
-                        'log': log_text,
-                        'stream': stream,
-                        'timestamp': timestamp,
-                        'is_traceback': False,
-                    })
-            else:
-                # stderr: capture everything
-                entries.append({
-                    'container_id': container_id,
-                    'container_name': name,
-                    'image': image,
-                    'log': log_text,
-                    'stream': stream,
-                    'timestamp': timestamp,
-                    'is_traceback': False,
-                })
+            entries.append({
+                'container_id': container_id,
+                'container_name': name,
+                'image': image,
+                'log': log_text,
+                'stream': stream,
+                'timestamp': timestamp,
+                'is_traceback': False,
+            })
 
             i += 1
 
