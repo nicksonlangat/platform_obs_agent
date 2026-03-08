@@ -114,6 +114,8 @@ class DockerMonitor:
                 'block_read_bytes': None,
                 'block_write_bytes': None,
                 'pids': None,
+                'ports': [],
+                'volumes': [],
             }
 
             # Get inspect data (works for all containers)
@@ -187,6 +189,40 @@ class DockerMonitor:
             if state.get('Error'):
                 reasons.append(state['Error'])
             info['last_restart_reason'] = '; '.join(reasons)
+
+            # Port mappings
+            ports = []
+            raw_ports = data.get('NetworkSettings', {}).get('Ports', {})
+            for port_proto, bindings in raw_ports.items():
+                container_port, _, protocol = port_proto.partition('/')
+                if bindings:
+                    for binding in bindings:
+                        ports.append({
+                            'container_port': int(container_port),
+                            'host_port': int(binding.get('HostPort', 0)) if binding.get('HostPort') else None,
+                            'protocol': protocol,
+                            'host_ip': binding.get('HostIp', ''),
+                        })
+                else:
+                    ports.append({
+                        'container_port': int(container_port),
+                        'host_port': None,
+                        'protocol': protocol,
+                        'host_ip': '',
+                    })
+            info['ports'] = ports
+
+            # Volume mounts
+            info['volumes'] = [
+                {
+                    'name': mount.get('Name', ''),
+                    'source': mount.get('Source', ''),
+                    'destination': mount.get('Destination', ''),
+                    'mode': mount.get('Mode', ''),
+                    'driver': mount.get('Driver', ''),
+                }
+                for mount in data.get('Mounts', [])
+            ]
 
             return info
 
