@@ -46,6 +46,7 @@ class ObservabilityAgent:
     def __init__(self):
         self.config = Config()
         self.running = False
+        self._metrics_paused_until = 0
 
         # Initialize Docker monitor if available
         if DOCKER_MONITOR_AVAILABLE:
@@ -144,7 +145,7 @@ class ObservabilityAgent:
             'machine_id': self.config.get_machine_id(),
             'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
-            'agent_version': '1.1.9'
+            'agent_version': '1.2.0'
         }
 
         try:
@@ -254,6 +255,10 @@ class ObservabilityAgent:
 
     def _send_server_metrics(self):
         """Send server metrics to the API"""
+        if time.time() < self._metrics_paused_until:
+            self.logger.debug("Server metrics paused due to plan limit, skipping")
+            return
+
         try:
             metrics = self._collect_server_metrics()
             if not metrics:
@@ -272,6 +277,9 @@ class ObservabilityAgent:
 
             if response.status_code == 201:
                 self.logger.debug("Server metrics sent successfully")
+            elif response.status_code == 429:
+                self._metrics_paused_until = time.time() + 3600
+                self.logger.warning("Server metrics paused for 1 hour — plan limit reached")
             else:
                 self.logger.warning(f"Failed to send metrics: {response.status_code} - {response.text}")
 
@@ -360,14 +368,22 @@ class ObservabilityAgent:
     def _container_log_collection_loop(self):
         """Periodically collect and send Docker container logs"""
         self.logger.info("Starting container log collection loop")
-
         while self.running:
             self.config.fetch_server_config()
+            if not self.config.get('collect_container_logs', True):
+                time.sleep(self.config.get('container_log_interval', 30))
+                continue
             try:
                 logs = self.container_log_collector.collect_logs()
                 if logs:
-                    self.container_log_collector.send_logs(logs)
-                    self.logger.debug(f"Sent {len(logs)} container log entries")
+                    status_code = self.container_log_collector.send_logs(logs)
+                    if status_code == 403:
+                        self.config.config['collect_container_logs'] = False
+                        self.logger.info(
+                            "Container log collection disabled — upgrade your plan to access Docker container logs"
+                        )
+                    else:
+                        self.logger.debug(f"Sent {len(logs)} container log entries")
             except Exception as e:
                 self.logger.error(f"Error in container log collection loop: {e}")
             time.sleep(self.config.get('container_log_interval', 30))

@@ -213,13 +213,14 @@ class ContainerLogCollector:
         # No timestamp found, use current time
         return datetime.now(timezone.utc).isoformat(), line
 
-    def send_logs(self, logs: List[Dict]) -> bool:
+    def send_logs(self, logs: List[Dict]) -> int:
         """
         Send collected logs to the WatchDock backend.
         POST /core/agent/container-logs/
+        Returns the HTTP status code (0 on connection error).
         """
         if not logs:
-            return True
+            return 200
 
         try:
             api_token = self.config.get('api_token')
@@ -243,13 +244,12 @@ class ContainerLogCollector:
 
             if response.status_code in (200, 201):
                 self.logger.debug(f"Container logs sent: {len(logs)} entries")
-                return True
             else:
                 self.logger.warning(
                     f"Failed to send container logs: {response.status_code} - {response.text}"
                 )
-                return False
+            return response.status_code
 
         except Exception as e:
             self.logger.error(f"Error sending container logs: {e}")
-            return False
+            return 0

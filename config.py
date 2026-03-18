@@ -14,6 +14,7 @@ AGENT_CONFIG_KEYS = (
     "metrics_interval",
     "docker_metrics_interval",
     "container_log_interval",
+    "collect_container_logs",
     "nginx_interval",
     "nginx_sources",
 )
