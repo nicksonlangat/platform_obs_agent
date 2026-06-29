@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from typing import List, Dict
 from config import Config
 
+AGENT_VERSION = "1.2.1"
+
 try:
     import psutil
     PSUTIL_AVAILABLE = True
@@ -147,7 +149,7 @@ class ObservabilityAgent:
             'machine_id': self.config.get_machine_id(),
             'hostname': self.config.get_hostname(),
             'collected_at': datetime.now(timezone.utc).isoformat(),
-            'agent_version': '1.2.0'
+            'agent_version': AGENT_VERSION
         }
 
         try:
@@ -411,7 +413,7 @@ class ObservabilityAgent:
                 json={
                     "machine_id": self.config.get_machine_id(),
                     "hostname": self.config.get_hostname(),
-                    "agent_version": "1.2.0",
+                    "agent_version": AGENT_VERSION,
                 },
                 headers={
                     "Authorization": f"Bearer {api_token}",
