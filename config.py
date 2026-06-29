@@ -17,6 +17,7 @@ AGENT_CONFIG_KEYS = (
     "collect_container_logs",
     "nginx_interval",
     "nginx_sources",
+    "auto_update",
 )
 
 MIN_REFRESH_INTERVAL = 30  # seconds — never hit the API more often than this

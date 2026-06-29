@@ -127,6 +127,9 @@ class ObservabilityAgent:
         else:
             self.logger.info("Nginx log collection disabled")
 
+        if self.config.get('auto_update', False):
+            self.logger.info("Auto-update enabled — will check for new versions on each config refresh")
+
         # Main loop
         try:
             while self.running:
@@ -300,6 +303,8 @@ class ObservabilityAgent:
                 self._send_server_metrics()
             except Exception as e:
                 self.logger.error(f"Error in metrics loop: {e}")
+            if self.config.get('auto_update', False):
+                self._check_for_update()
             time.sleep(self.config.get('metrics_interval', 300))
 
     def _get_server_ip(self) -> str:
@@ -403,6 +408,51 @@ class ObservabilityAgent:
             except Exception as e:
                 self.logger.error(f"Error in nginx log collection loop: {e}")
             time.sleep(self.config.get('nginx_interval', 60))
+
+    def _check_for_update(self):
+        """Check if a newer agent version is available and self-update if so."""
+        try:
+            resp = requests.get(
+                f"{self.config.get('api_endpoint')}/platform-stats/",
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return
+            latest = resp.json().get("latest_agent_version")
+            if latest and latest != AGENT_VERSION:
+                self.logger.info(f"New agent version available: {latest} (current: {AGENT_VERSION}). Updating...")
+                self._perform_update()
+            else:
+                self.logger.debug(f"Agent is up to date (v{AGENT_VERSION})")
+        except Exception as e:
+            self.logger.warning(f"Auto-update check failed: {e}")
+
+    def _perform_update(self):
+        """Download and run the upgrade script to update this agent in place."""
+        import subprocess
+        import tempfile
+
+        upgrade_url = f"{self.config.get('api_endpoint', '').replace('/api', '')}/upgrade.sh"
+        try:
+            resp = requests.get(upgrade_url, timeout=15)
+            resp.raise_for_status()
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
+                f.write(resp.text)
+                script_path = f.name
+            import os
+            os.chmod(script_path, 0o755)
+            result = subprocess.run(
+                ["sudo", "bash", script_path],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                self.logger.info("Auto-update completed — agent service will restart momentarily")
+            else:
+                self.logger.error(f"Auto-update script failed: {result.stderr[:500]}")
+        except Exception as e:
+            self.logger.error(f"Auto-update failed: {e}")
 
     def _send_startup_event(self):
         """Notify the platform immediately that this agent has started."""
