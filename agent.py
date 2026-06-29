@@ -84,6 +84,7 @@ class ObservabilityAgent:
 
         self.running = True
         self.logger.info("Starting Observability Agent...")
+        self._send_startup_event()
 
         # Start metrics collection thread (if enabled and psutil available)
         if self.config.get('collect_metrics', True) and PSUTIL_AVAILABLE:
@@ -134,6 +135,7 @@ class ObservabilityAgent:
     def stop(self):
         self.logger.info("Stopping Observability Agent...")
         self.running = False
+        self._send_shutdown_event("clean")
         self.logger.info("Agent stopped")
 
     def _collect_server_metrics(self) -> Dict:
@@ -400,8 +402,53 @@ class ObservabilityAgent:
                 self.logger.error(f"Error in nginx log collection loop: {e}")
             time.sleep(self.config.get('nginx_interval', 60))
 
+    def _send_startup_event(self):
+        """Notify the platform immediately that this agent has started."""
+        try:
+            api_token = self.config.get("api_token")
+            response = requests.post(
+                f"{self.config.get('api_endpoint')}/core/agent/startup/",
+                json={
+                    "machine_id": self.config.get_machine_id(),
+                    "hostname": self.config.get_hostname(),
+                    "agent_version": "1.2.0",
+                },
+                headers={
+                    "Authorization": f"Bearer {api_token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=10,
+            )
+            if response.status_code == 200:
+                self.logger.info("Startup event recorded by platform")
+            else:
+                self.logger.warning(f"Startup event returned {response.status_code}")
+        except Exception as e:
+            self.logger.warning(f"Could not send startup event: {e}")
+
+    def _send_shutdown_event(self, reason: str = "clean"):
+        """Notify the platform that this agent is shutting down cleanly."""
+        try:
+            api_token = self.config.get("api_token")
+            requests.post(
+                f"{self.config.get('api_endpoint')}/core/agent/shutdown/",
+                json={
+                    "machine_id": self.config.get_machine_id(),
+                    "hostname": self.config.get_hostname(),
+                    "reason": reason,
+                },
+                headers={
+                    "Authorization": f"Bearer {api_token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=5,
+            )
+        except Exception as e:
+            self.logger.debug(f"Could not send shutdown event: {e}")
+
     def _signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}")
+        self._send_shutdown_event("signal")
         self.stop()
 
 def test_configuration():
